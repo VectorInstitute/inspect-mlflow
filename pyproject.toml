@@ -1,0 +1,77 @@
+[project]
+name = "inspect-mlflow"
+version = "0.1.0"
+description = "MLflow integration for Inspect AI"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "inspect_ai>=0.3.154",
+  "mlflow>=3.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.17.0",
+  "pre-commit",
+  "ruff==0.9.6",
+  "uv",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["inspect_mlflow*"]
+
+[project.entry-points.inspect_ai]
+inspect_mlflow = "inspect_mlflow._registry"
+
+[tool.ruff]
+extend-exclude = ["docs"]
+src = ["inspect_mlflow"]
+
+[tool.ruff.lint]
+select = [
+  "E",      # pycodestyle errors
+  "W",      # pycodestyle warnings
+  "F",      # flake8
+  "D",      # pydocstyle
+  "I",      # isort
+  "B",      # flake8-bugbear
+  "SIM101", # duplicate isinstance
+  # "RET", # flake8-return
+  # "RUF", # ruff rules
+  "DTZ",
+]
+ignore = [
+  "E203",
+  "E501",
+  "D10",
+  "D212",
+  "D415",
+  "B006",
+  "B007",
+  "B008",
+  "B009",
+  "B010",
+  "B011",
+  "B017",
+  "B027",
+  "B028",
+  "B039",
+  "B904",
+  "B905",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+warn_unused_ignores = true
+no_implicit_reexport = true
+strict_equality = true
+enable_error_code = "possibly-undefined"
+warn_redundant_casts = true
+warn_unused_configs = true
