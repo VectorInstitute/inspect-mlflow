@@ -25,7 +25,6 @@ repos:
       - id: check-yaml
       - id: debug-statements
       - id: detect-private-key
-      - id: requirements-txt-fixer
   - repo: https://github.com/crate-ci/typos
     rev: v1.31.2
     hooks:
