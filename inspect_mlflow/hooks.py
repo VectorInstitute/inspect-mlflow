@@ -387,11 +387,12 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
                 if isinstance(stats_usage, dict):
                     self._aggregate_usage_for_task(eval_id, stats_usage)
 
-            # Determine run status
-            status = "FINISHED"
-            exception = getattr(data, "exception", None)
-            if exception is not None:
-                status = "FAILED"
+            # Determine run status from TaskEnd log status.
+            # TaskEnd does not include an exception field.
+            log_status = str(_obj_get(log, "status") or "").lower()
+            status = (
+                "FINISHED" if (not log_status or log_status == "success") else "FAILED"
+            )
 
             client.set_tag(run_id, f"{TAG_PREFIX}.status", status)
 
