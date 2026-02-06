@@ -515,6 +515,10 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
             "gemini": ("mlflow.gemini", "autolog"),
             "bedrock": ("mlflow.bedrock", "autolog"),
         }
+        dependency_map = {
+            "gemini": "google.generativeai",
+            "bedrock": "boto3",
+        }
 
         enabled_any = False
         for model in models:
@@ -524,11 +528,12 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
 
             module_name, func_name = autolog_map[model_lower]
 
-            # Check if the library is installed
-            lib_name = model_lower
-            if lib_name == "gemini":
-                lib_name = "google.generativeai"
-            if not importlib.util.find_spec(lib_name):
+            # Check if both the MLflow flavor module and provider library exist.
+            if importlib.util.find_spec(module_name) is None:
+                continue
+
+            lib_name = dependency_map.get(model_lower, model_lower)
+            if importlib.util.find_spec(lib_name) is None:
                 continue
 
             try:
