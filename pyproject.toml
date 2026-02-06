@@ -7,12 +7,16 @@ requires-python = ">=3.10"
 dependencies = [
   "inspect_ai>=0.3.154",
   "mlflow>=3.9.0",
+  "pydantic>=2.0.0",
+  "pydantic-settings>=2.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
   "mypy>=1.17.0",
   "pre-commit",
+  "pytest>=7.0.0",
+  "pytest-asyncio>=0.21.0",
   "ruff==0.9.6",
   "uv",
 ]
