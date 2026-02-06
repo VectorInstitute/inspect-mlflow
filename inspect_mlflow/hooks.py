@@ -536,7 +536,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
                 module = importlib.import_module(module_name)
                 autolog_func = getattr(module, func_name, None)
                 if autolog_func is not None:
-                    autolog_func(log_traces=True, log_models=False)
+                    autolog_func(log_traces=True)
                     enabled_any = True
                     _LOG.debug(f"Enabled MLflow autolog for {model}")
             except Exception:

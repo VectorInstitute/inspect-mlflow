@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any
+import json
+from typing import Annotated, Any
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 def _empty_to_none(v: Any) -> Any:
@@ -72,7 +73,7 @@ class MLflowSettings(BaseSettings):
         default=True,
         description="Enable automatic tracing of LLM library calls (OpenAI, Anthropic, etc.)",
     )
-    autolog_models: list[str] = Field(
+    autolog_models: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["openai", "anthropic", "langchain", "litellm"],
         description="LLM libraries to autolog. Options: openai, anthropic, langchain, litellm, mistral, etc.",
     )
@@ -80,9 +81,22 @@ class MLflowSettings(BaseSettings):
     @field_validator("autolog_models", mode="before")
     @classmethod
     def parse_autolog_models(cls, v: Any) -> list[str]:
-        """Parse autolog_models from comma-separated string or list."""
+        """Parse autolog_models from comma-separated string, JSON array, or list."""
         if isinstance(v, str):
-            return [m.strip().lower() for m in v.split(",") if m.strip()]
+            value = v.strip()
+            if not value:
+                return ["openai", "anthropic", "langchain", "litellm"]
+
+            # Support both JSON-array env format and CSV env format.
+            if value.startswith("["):
+                try:
+                    parsed = json.loads(value)
+                except json.JSONDecodeError:
+                    parsed = None
+                if isinstance(parsed, list):
+                    return [str(m).strip().lower() for m in parsed if str(m).strip()]
+
+            return [m.strip().lower() for m in value.split(",") if m.strip()]
         if isinstance(v, list):
             return [str(m).strip().lower() for m in v]
         return ["openai", "anthropic", "langchain", "litellm"]
