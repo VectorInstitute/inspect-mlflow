@@ -70,6 +70,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
         self._task_usage_totals: dict[str, dict[str, dict[str, int]]] = defaultdict(
             lambda: defaultdict(dict)
         )
+        self._task_settings: dict[str, MLflowSettings] = {}
 
         # Table rows for batch logging (per eval_id)
         self._task_sample_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -192,20 +193,22 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
             return
 
         try:
+            eval_id = str(getattr(data, "eval_id", None) or "unknown")
+            task_settings = self.settings
+
             # Check for task metadata overrides
             spec = getattr(data, "spec", None)
             if spec is not None:
                 metadata = getattr(spec, "metadata", None)
                 if metadata:
-                    self._settings = MLflowSettings.from_metadata(metadata)
-                    if not self._settings.enabled:
+                    task_settings = MLflowSettings.from_metadata(metadata)
+                    if not task_settings.enabled:
                         _LOG.info("MLflow disabled via task metadata")
                         return
 
             mlflow = self._mlflow()
-            cfg = self.settings
+            cfg = task_settings
 
-            eval_id = str(getattr(data, "eval_id", None) or "unknown")
             task_name = (
                 getattr(spec, "task", None) or getattr(spec, "name", None)
                 if spec
@@ -238,8 +241,15 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
             self._task_sample_steps[eval_id] = 0
 
             # Get experiment ID
+            experiment_name = cfg.experiment or self._experiment_name
+            if experiment_name is None:
+                experiment_name = self._default_experiment_name(
+                    run_id=self._inspect_run_id, task_names=self._all_task_names
+                )
+            self._ensure_experiment(mlflow, experiment_name)
+
             client = mlflow.tracking.MlflowClient()
-            experiment = client.get_experiment_by_name(self._experiment_name)
+            experiment = client.get_experiment_by_name(experiment_name)
             experiment_id = experiment.experiment_id if experiment else "0"
 
             # Create a new run using the client (avoids affecting global active run)
@@ -250,6 +260,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
                 )
                 run_id = run.info.run_id
                 self._active_runs[eval_id] = run_id
+                self._task_settings[eval_id] = cfg
 
             # Tags: only things useful for filtering/grouping in the UI
             if task_name:
@@ -286,7 +297,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
 
         try:
             mlflow = self._mlflow()
-            cfg = self.settings
+            cfg = self._task_settings.get(eval_id, self.settings)
             client = mlflow.tracking.MlflowClient()
 
             sample = getattr(data, "sample", None)
@@ -360,7 +371,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
 
         try:
             mlflow = self._mlflow()
-            cfg = self.settings
+            cfg = self._task_settings.get(eval_id, self.settings)
             client = mlflow.tracking.MlflowClient()
 
             log = getattr(data, "log", None)
@@ -422,6 +433,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
                 mlflow_status = "FINISHED" if status == "FINISHED" else "FAILED"
                 client.set_terminated(run_id, status=mlflow_status)
                 del self._active_runs[eval_id]
+                self._task_settings.pop(eval_id, None)
 
             _LOG.info(
                 f"MLflow run completed for task {task_name} (eval_id={eval_id}): {run_id}"
@@ -474,6 +486,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
                 self._task_models.clear()
                 self._task_raw_scores.clear()
                 self._task_usage_totals.clear()
+                self._task_settings.clear()
                 self._task_sample_rows.clear()
                 self._task_sample_score_rows.clear()
                 self._task_rows_data.clear()
