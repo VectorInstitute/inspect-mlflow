@@ -369,7 +369,8 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
                 stats = _obj_get(log, "stats")
                 stats_usage = _obj_get(stats, "model_usage")
                 if isinstance(stats_usage, dict):
-                    self._aggregate_usage_for_task(eval_id, stats_usage)
+                    # Reconcile totals at task end without additive accumulation.
+                    self._set_usage_totals_for_task(eval_id, stats_usage)
 
             # Determine run status from TaskEnd log status.
             # TaskEnd does not include an exception field.

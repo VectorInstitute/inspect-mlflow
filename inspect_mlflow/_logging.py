@@ -179,6 +179,29 @@ class LoggingMixin:
             for key, value in usage_dict.items():
                 totals[key] = int(totals.get(key, 0)) + int(value)
 
+    def _set_usage_totals_for_task(
+        self, eval_id: str, stats_usage: dict[str, Any]
+    ) -> None:
+        """Set usage totals from task stats for a specific eval_id.
+
+        This replaces current totals for the eval rather than adding to them.
+        It is used at task end to avoid double-counting when per-sample usage
+        has already been aggregated during sample events.
+        """
+        totals_for_eval: dict[str, dict[str, int]] = {}
+        for model_key, usage in stats_usage.items():
+            usage_dict = _usage_to_dict(usage)
+            if not usage_dict:
+                continue
+            model_name = str(model_key)
+            self._task_models[eval_id].add(model_name)
+            totals_for_eval[model_name] = {
+                key: int(value) for key, value in usage_dict.items()
+            }
+
+        if totals_for_eval:
+            self._task_usage_totals[eval_id] = totals_for_eval
+
     def _log_usage_metrics_client(self, client: Any, run_id: str, eval_id: str) -> None:
         """Log aggregated token usage metrics using client API."""
         usage_totals = self._task_usage_totals.get(eval_id, {})
