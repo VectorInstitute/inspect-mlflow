@@ -87,8 +87,7 @@ class TracingMixin:
             return trace_id
 
         except Exception:
-            self._trace_supported = False
-            _LOG.debug("MLflow tracing disabled for this run", exc_info=True)
+            _LOG.debug("Could not log sample trace", exc_info=True)
             return None
 
     def _log_event_spans(
