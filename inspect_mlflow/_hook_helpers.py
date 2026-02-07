@@ -29,7 +29,7 @@ def is_correct(sample: Any) -> bool:
 
 
 def ensure_experiment(mlflow: Any, name: str) -> None:
-    """Create or get experiment by name and activate it."""
+    """Create or restore experiment by name using client APIs only."""
     client = mlflow.tracking.MlflowClient()
     existing = client.get_experiment_by_name(name)
 
@@ -38,11 +38,7 @@ def ensure_experiment(mlflow: Any, name: str) -> None:
         existing = client.get_experiment(existing.experiment_id)
 
     if existing is None:
-        experiment_id = client.create_experiment(name)
-    else:
-        experiment_id = existing.experiment_id
-
-    mlflow.set_experiment(experiment_id=experiment_id)
+        client.create_experiment(name)
 
 
 def default_experiment_name(
