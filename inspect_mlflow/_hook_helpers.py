@@ -32,6 +32,88 @@ def is_correct(sample: Any) -> bool:
     return False
 
 
+def select_accuracy_score(
+    sample: Any,
+    *,
+    preferred_scorer: str | None = None,
+    task_scorers: list[str] | None = None,
+) -> tuple[str | None, Any | None]:
+    """Select scorer value used for aggregate accuracy.
+
+    Selection order:
+    1) Explicitly configured scorer name (preferred_scorer)
+    2) First scorer from task definition order (task_scorers)
+    3) Single available sample score
+    """
+    scores = getattr(sample, "scores", None)
+    if not scores:
+        return None, None
+
+    items = [(str(name), score) for name, score in _iter_scores(scores)]
+    if not items:
+        return None, None
+
+    score_map = {name: score for name, score in items}
+
+    if preferred_scorer:
+        score = score_map.get(preferred_scorer)
+        return (preferred_scorer, score) if score is not None else (None, None)
+
+    if task_scorers:
+        for scorer_name in task_scorers:
+            score = score_map.get(str(scorer_name))
+            if score is not None:
+                return str(scorer_name), score
+
+    if len(items) == 1:
+        return items[0]
+
+    return None, None
+
+
+def is_selected_score_correct(
+    sample: Any,
+    *,
+    preferred_scorer: str | None = None,
+    task_scorers: list[str] | None = None,
+) -> tuple[bool | None, str | None]:
+    """Return correctness for selected scorer and selected scorer name.
+
+    Returns:
+      - (True/False, scorer_name) when a scorer could be selected
+      - (None, None) when no scorer could be selected
+    """
+    scorer_name, score = select_accuracy_score(
+        sample,
+        preferred_scorer=preferred_scorer,
+        task_scorers=task_scorers,
+    )
+    if score is None:
+        return None, None
+
+    value = getattr(score, "value", score)
+    if value == CORRECT or value is True:
+        return True, scorer_name
+    metric_value = _coerce_metric(value)
+    if metric_value is not None:
+        return metric_value == 1.0, scorer_name
+    return False, scorer_name
+
+
+def task_scorer_names_from_spec(spec: Any) -> list[str]:
+    """Extract scorer names from task spec if available."""
+    scorers = _obj_get(spec, "scorers")
+    if not isinstance(scorers, list):
+        return []
+
+    names: list[str] = []
+    for scorer in scorers:
+        name = _obj_get(scorer, "name") or _obj_get(scorer, "scorer")
+        if name:
+            names.append(str(name))
+    return names
+
+
 def ensure_experiment(mlflow: Any, name: str) -> None:
     """Create or restore experiment by name using client APIs only."""
     client = mlflow.tracking.MlflowClient()

@@ -26,8 +26,10 @@ from ._hook_helpers import (
     get_sample_output_text,
     get_task_name,
     is_correct,
+    is_selected_score_correct,
     rows_to_columns,
     scores_to_dict,
+    task_scorer_names_from_spec,
 )
 from ._logging import LoggingMixin
 from ._state import clear_task_state, initialize_tracking_state, reset_run_state
@@ -210,8 +212,13 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
 
             # Initialize per-task state
             self._task_sample_counts[eval_id] = 0
+            self._task_scored_counts[eval_id] = 0
             self._task_correct_counts[eval_id] = 0
             self._task_sample_steps[eval_id] = 0
+            if spec is not None:
+                scorer_names = task_scorer_names_from_spec(spec)
+                if scorer_names:
+                    self._task_scorer_names_by_eval_id[eval_id] = scorer_names
 
             # Get experiment ID
             experiment_name = cfg.experiment or self._experiment_name
@@ -287,20 +294,41 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
                     self._task_sample_counts.get(eval_id, 0) + 1
                 )
                 total_samples = self._task_sample_counts[eval_id]
-                if sample is not None and self._is_correct(sample):
+
+                sample_correctness: bool | None = None
+                if sample is not None:
+                    sample_correctness = self._sample_correctness(
+                        eval_id,
+                        sample,
+                        preferred_scorer=cfg.accuracy_scorer,
+                    )
+
+                if sample_correctness is not None:
+                    self._task_scored_counts[eval_id] = (
+                        self._task_scored_counts.get(eval_id, 0) + 1
+                    )
+
+                if sample_correctness is True:
                     self._task_correct_counts[eval_id] = (
                         self._task_correct_counts.get(eval_id, 0) + 1
                     )
+                scored_samples = self._task_scored_counts.get(eval_id, 0)
                 correct_samples = self._task_correct_counts.get(eval_id, 0)
 
-            accuracy = correct_samples / total_samples if total_samples > 0 else 0.0
+            accuracy = (
+                (correct_samples / scored_samples) if scored_samples > 0 else None
+            )
 
             # Log progress metrics using client API (works with parallel tasks)
             client.log_metric(run_id, f"{TAG_PREFIX}.samples", total_samples, step=step)
-            client.log_metric(run_id, f"{TAG_PREFIX}.accuracy", accuracy, step=step)
             client.log_metric(
-                run_id, f"{TAG_PREFIX}.samples_correct", correct_samples, step=step
+                run_id, f"{TAG_PREFIX}.samples_scored", scored_samples, step=step
             )
+            if accuracy is not None:
+                client.log_metric(run_id, f"{TAG_PREFIX}.accuracy", accuracy, step=step)
+                client.log_metric(
+                    run_id, f"{TAG_PREFIX}.samples_correct", correct_samples, step=step
+                )
 
             # Log sample scores
             task_name = self._task_names_by_eval_id.get(eval_id, eval_id)
@@ -392,12 +420,19 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
 
             # Log final summary metrics for this task
             total_samples = self._task_sample_counts.get(eval_id, 0)
+            scored_samples = self._task_scored_counts.get(eval_id, 0)
             correct_samples = self._task_correct_counts.get(eval_id, 0)
-            accuracy = correct_samples / total_samples if total_samples > 0 else 0.0
+            accuracy = (
+                (correct_samples / scored_samples) if scored_samples > 0 else None
+            )
 
             client.log_metric(run_id, f"{TAG_PREFIX}.samples_total", total_samples)
-            client.log_metric(run_id, f"{TAG_PREFIX}.samples_correct", correct_samples)
-            client.log_metric(run_id, f"{TAG_PREFIX}.accuracy", accuracy)
+            client.log_metric(run_id, f"{TAG_PREFIX}.samples_scored", scored_samples)
+            if accuracy is not None:
+                client.log_metric(
+                    run_id, f"{TAG_PREFIX}.samples_correct", correct_samples
+                )
+                client.log_metric(run_id, f"{TAG_PREFIX}.accuracy", accuracy)
             self._log_usage_metrics_client(client, run_id, eval_id)
 
             # Log artifacts for this task via client APIs (safe for parallel tasks)
@@ -504,6 +539,22 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
     def _is_correct(self, sample: Any) -> bool:
         """Check if a sample is correct based on scores."""
         return is_correct(sample)
+
+    def _sample_correctness(
+        self,
+        eval_id: str,
+        sample: Any,
+        *,
+        preferred_scorer: str | None = None,
+    ) -> bool | None:
+        """Resolve correctness from selected scorer for an eval task."""
+        task_scorers = self._task_scorer_names_by_eval_id.get(eval_id)
+        is_correct_selected, _ = is_selected_score_correct(
+            sample,
+            preferred_scorer=preferred_scorer,
+            task_scorers=task_scorers,
+        )
+        return is_correct_selected
 
     def _ensure_experiment(self, mlflow: Any, name: str) -> None:
         """Create or get experiment by name."""

@@ -116,6 +116,7 @@ The sections below group configuration into:
 | `INSPECT_MLFLOW_TRACKING_URI` | - | MLflow tracking server URI |
 | `INSPECT_MLFLOW_EXPERIMENT` | auto | Experiment name (auto-generated if unset) |
 | `INSPECT_MLFLOW_RUN_NAME` | auto | Run name (`<task>-<model>-<eval_id>` unless overridden) |
+| `INSPECT_MLFLOW_ACCURACY_SCORER` | auto | Scorer name used for `inspect.accuracy`/`inspect.samples_correct` (defaults to first task scorer when available) |
 
 ### Logging
 
@@ -151,6 +152,25 @@ def my_task():
     )
 ```
 
+For scorer selection, you can override accuracy behavior per task:
+
+```python
+metadata={
+    "inspect_mlflow_accuracy_scorer": "exact",
+}
+```
+
+### Accuracy Semantics
+
+`inspect-mlflow` computes `inspect.accuracy` and `inspect.samples_correct` from one selected scorer per task:
+
+1. `INSPECT_MLFLOW_ACCURACY_SCORER` / `inspect_mlflow_accuracy_scorer` when set.
+2. Otherwise, the first scorer declared on the Inspect task.
+3. Otherwise, if a sample has exactly one score, that score is used.
+
+If no scorer can be selected for a sample, it is excluded from accuracy denominator (`inspect.samples_scored`).
+If a task has zero scored samples, `inspect.accuracy` and `inspect.samples_correct` are not emitted.
+
 ## What Gets Logged
 
 ### Tags
@@ -168,8 +188,8 @@ def my_task():
 
 ### Metrics
 
-- running: `inspect.samples`, `inspect.samples_correct`, `inspect.accuracy`
-- final: `inspect.samples_total`, `inspect.samples_correct`, `inspect.accuracy`
+- running: `inspect.samples`, `inspect.samples_scored`, `inspect.samples_correct`, `inspect.accuracy`
+- final: `inspect.samples_total`, `inspect.samples_scored`, `inspect.samples_correct`, `inspect.accuracy`
 - sample scores: `inspect.sample.<eval_id>.<scorer>`
 - task aggregate scores: `inspect.task.<task>.<scorer>[.<metric>]`
 - token usage: `inspect.usage.<model>.<token_field>`, `inspect.tokens.<token_field>`

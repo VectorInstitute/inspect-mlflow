@@ -57,6 +57,10 @@ class MLflowSettings(BaseSettings):
         default=None,
         description="MLflow run name. Uses Inspect run_id if not set.",
     )
+    accuracy_scorer: str | None = Field(
+        default=None,
+        description="Scorer name used for inspect.accuracy/inspect.samples_correct. If unset, first task scorer is used when available.",
+    )
 
     # Logging granularity
     log_artifacts: bool = Field(
