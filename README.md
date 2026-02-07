@@ -137,7 +137,12 @@ Autolog entries are enabled only when both MLflow flavor support and provider de
 ### Task Metadata Overrides
 
 Use task metadata overrides when one specific task needs behavior different from your global environment-based defaults.
-Each override key should use the `inspect_mlflow_` prefix and map to a supported setting field.
+Each override key should use the `inspect_mlflow_` prefix.
+
+Current support is split by scope:
+
+- Per-task overrides (applied in `on_task_start` / task lifecycle): `enabled`, `experiment`, `run_name`, `log_artifacts`, `log_traces`, `accuracy_scorer`
+- Run-level only (read once in `on_run_start`): `tracking_uri`, `autolog_enabled`, `autolog_models`
 
 ```python
 @task
@@ -148,17 +153,12 @@ def my_task():
         metadata={
             "inspect_mlflow_enabled": False,
             "inspect_mlflow_experiment": "my-custom-experiment",
+            "inspect_mlflow_accuracy_scorer": "exact",
         },
     )
 ```
 
-For scorer selection, you can override accuracy behavior per task:
-
-```python
-metadata={
-    "inspect_mlflow_accuracy_scorer": "exact",
-}
-```
+If you need different tracking URIs or autolog settings, run those tasks in separate Inspect runs with different environment variables.
 
 ### Accuracy Semantics
 
