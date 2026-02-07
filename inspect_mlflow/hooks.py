@@ -276,22 +276,23 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
             sample = getattr(data, "sample", None)
             scores = getattr(sample, "scores", None) if sample is not None else None
 
-            # Get per-task step
-            step = self._task_sample_steps.get(eval_id, 0)
-            self._task_sample_steps[eval_id] = step + 1
-
-            # Update per-task accuracy counters
+            # Update per-task progress counters.
             with self._lock:
+                # Keep step aligned with the post-sample state.
+                self._task_sample_steps[eval_id] = (
+                    self._task_sample_steps.get(eval_id, 0) + 1
+                )
+                step = self._task_sample_steps[eval_id]
                 self._task_sample_counts[eval_id] = (
                     self._task_sample_counts.get(eval_id, 0) + 1
                 )
+                total_samples = self._task_sample_counts[eval_id]
                 if sample is not None and self._is_correct(sample):
                     self._task_correct_counts[eval_id] = (
                         self._task_correct_counts.get(eval_id, 0) + 1
                     )
+                correct_samples = self._task_correct_counts.get(eval_id, 0)
 
-            total_samples = self._task_sample_counts.get(eval_id, 0)
-            correct_samples = self._task_correct_counts.get(eval_id, 0)
             accuracy = correct_samples / total_samples if total_samples > 0 else 0.0
 
             # Log progress metrics using client API (works with parallel tasks)
