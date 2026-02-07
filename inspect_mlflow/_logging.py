@@ -377,13 +377,20 @@ class LoggingMixin:
     ) -> None:
         """Upload Inspect log file for a specific task and log its path."""
         logged_paths: list[str] = []
-        uploaded_paths: list[str] = []
+        uploaded_local_paths: set[str] = set()
         search_dirs: list[Path] = []
 
         def add_search_dir(path: Path) -> None:
             """Add directory once, preserving order."""
             if path.exists() and path.is_dir() and path not in search_dirs:
                 search_dirs.append(path)
+
+        def uploaded_key(path: Path) -> str:
+            """Return a normalized key for deduping uploaded local files."""
+            try:
+                return str(path.resolve())
+            except Exception:
+                return str(path)
 
         # Get location from the log object
         if log is not None:
@@ -395,15 +402,19 @@ class LoggingMixin:
                 local_path = _location_to_local_path(location_str)
                 if local_path and local_path.exists():
                     add_search_dir(local_path.parent)
-                    uploaded_paths.append(location_str)
-                    try:
-                        client.log_artifact(
-                            run_id=run_id,
-                            local_path=str(local_path),
-                            artifact_path=f"{TAG_PREFIX}/logs",
-                        )
-                    except Exception:
-                        _LOG.debug(f"Could not upload log: {local_path}", exc_info=True)
+                    local_path_key = uploaded_key(local_path)
+                    if local_path_key not in uploaded_local_paths:
+                        uploaded_local_paths.add(local_path_key)
+                        try:
+                            client.log_artifact(
+                                run_id=run_id,
+                                local_path=str(local_path),
+                                artifact_path=f"{TAG_PREFIX}/logs",
+                            )
+                        except Exception:
+                            _LOG.debug(
+                                f"Could not upload log: {local_path}", exc_info=True
+                            )
 
         # Prefer inspect-provided log dir if available (e.g., custom INSPECT_LOG_DIR).
         eval_set_log_dir = getattr(self, "_eval_set_log_dir", None)
@@ -439,8 +450,9 @@ class LoggingMixin:
                             path_str = str(p)
                             if path_str not in logged_paths:
                                 logged_paths.append(path_str)
-                            if path_str not in uploaded_paths:
-                                uploaded_paths.append(path_str)
+                            local_path_key = uploaded_key(p)
+                            if local_path_key not in uploaded_local_paths:
+                                uploaded_local_paths.add(local_path_key)
                                 try:
                                     client.log_artifact(
                                         run_id=run_id,
