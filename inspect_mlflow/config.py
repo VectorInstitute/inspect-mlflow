@@ -111,9 +111,9 @@ class MLflowSettings(BaseSettings):
         overrides = {}
         if metadata:
             prefix = "inspect_mlflow_"
-            overrides = {
-                k[len(prefix) :]: v
-                for k, v in metadata.items()
-                if k.lower().startswith(prefix)
-            }
+            for key, value in metadata.items():
+                normalized_key = key.lower()
+                if normalized_key.startswith(prefix):
+                    field_name = normalized_key[len(prefix) :]
+                    overrides[field_name] = value
         return cls(**overrides)
