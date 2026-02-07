@@ -25,7 +25,7 @@ class MLflowSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="INSPECT_MLFLOW_",
-        env_file=".env" if __name__ != "__main__" else None,
+        env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
