@@ -30,7 +30,7 @@ from ._hook_helpers import (
     scores_to_dict,
 )
 from ._logging import LoggingMixin
-from ._state import initialize_tracking_state, reset_run_state
+from ._state import clear_task_state, initialize_tracking_state, reset_run_state
 from ._tracing import TracingMixin
 from ._utils import (
     TAG_PREFIX,
@@ -414,8 +414,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
             with self._lock:
                 mlflow_status = "FINISHED" if status == "FINISHED" else "FAILED"
                 client.set_terminated(run_id, status=mlflow_status)
-                del self._active_runs[eval_id]
-                self._task_settings.pop(eval_id, None)
+                clear_task_state(self, eval_id, clear_run_tracking=True)
 
             _LOG.info(
                 f"MLflow run completed for task {task_name} (eval_id={eval_id}): {run_id}"
@@ -423,6 +422,11 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
 
         except Exception:
             _LOG.exception("MLflow hook failed during task end")
+            # Release per-task buffers even when finalization fails.
+            # Keep active run tracking so on_run_end can terminate orphaned runs.
+            with self._lock:
+                if eval_id in self._active_runs:
+                    clear_task_state(self, eval_id, clear_run_tracking=False)
 
     async def on_run_end(self, data: RunEnd) -> None:
         """Clean up after all tasks have completed.

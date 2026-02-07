@@ -63,3 +63,29 @@ def reset_run_state(hook: Any) -> None:
     hook._task_rows_data.clear()
     hook._task_event_rows.clear()
     hook._task_usage_rows.clear()
+
+
+def clear_task_state(
+    hook: Any, eval_id: str, *, clear_run_tracking: bool = True
+) -> None:
+    """Clear per-task state for a single eval_id.
+
+    When ``clear_run_tracking`` is False, keep ``_active_runs[eval_id]`` so
+    orphaned runs can still be terminated later in ``on_run_end``.
+    """
+    if clear_run_tracking:
+        hook._active_runs.pop(eval_id, None)
+
+    hook._task_settings.pop(eval_id, None)
+    hook._task_names_by_eval_id.pop(eval_id, None)
+    hook._task_sample_counts.pop(eval_id, None)
+    hook._task_correct_counts.pop(eval_id, None)
+    hook._task_sample_steps.pop(eval_id, None)
+    hook._task_models.pop(eval_id, None)
+    hook._task_raw_scores.pop(eval_id, None)
+    hook._task_usage_totals.pop(eval_id, None)
+    hook._task_sample_rows.pop(eval_id, None)
+    hook._task_sample_score_rows.pop(eval_id, None)
+    hook._task_rows_data.pop(eval_id, None)
+    hook._task_event_rows.pop(eval_id, None)
+    hook._task_usage_rows.pop(eval_id, None)
