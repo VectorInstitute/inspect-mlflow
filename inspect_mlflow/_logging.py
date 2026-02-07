@@ -141,15 +141,6 @@ class LoggingMixin:
         self, client: Any, run_id: str, log: Any, task_name: str
     ) -> None:
         """Log task-level aggregate scores using client API."""
-        scores = _obj_get(log, "scores") or _obj_get(log, "metrics")
-        if scores:
-            for name, score in _iter_scores(scores):
-                metric_value = _coerce_metric(score)
-                if metric_value is not None:
-                    metric_name = _clean_key(f"{TAG_PREFIX}.task.{task_name}.{name}")
-                    client.log_metric(run_id, metric_name, metric_value)
-            return
-
         results = _obj_get(log, "results")
         if results:
             results_scores = _obj_get(results, "scores")
@@ -165,19 +156,6 @@ class LoggingMixin:
                                 f"{TAG_PREFIX}.task.{task_name}.{score_name}.{metric_name}"
                             )
                             client.log_metric(run_id, key, metric_value)
-
-    def _aggregate_usage_for_task(
-        self, eval_id: str, stats_usage: dict[str, Any]
-    ) -> None:
-        """Aggregate usage from task stats for a specific eval_id."""
-        for model_key, usage in stats_usage.items():
-            usage_dict = _usage_to_dict(usage)
-            if not usage_dict:
-                continue
-            self._task_models[eval_id].add(str(model_key))
-            totals = self._task_usage_totals[eval_id].setdefault(str(model_key), {})
-            for key, value in usage_dict.items():
-                totals[key] = int(totals.get(key, 0)) + int(value)
 
     def _set_usage_totals_for_task(
         self, eval_id: str, stats_usage: dict[str, Any]
