@@ -345,7 +345,7 @@ class LoggingMixin:
     # Artifact Logging
     # -------------------------------------------------------------------------
 
-    def _log_tables_for_task(self, mlflow: Any, eval_id: str) -> None:
+    def _log_tables_for_task(self, client: Any, run_id: str, eval_id: str) -> None:
         """Log all accumulated tables for a specific task as artifacts."""
         tables = [
             ("samples", self._task_sample_rows.get(eval_id, [])),
@@ -359,7 +359,8 @@ class LoggingMixin:
             if not rows:
                 continue
             try:
-                mlflow.log_table(
+                client.log_table(
+                    run_id=run_id,
                     data=self._rows_to_columns(rows),
                     artifact_file=f"{TAG_PREFIX}/{name}.json",
                 )
@@ -368,7 +369,8 @@ class LoggingMixin:
 
     def _log_task_inspect_logs(
         self,
-        mlflow: Any,
+        client: Any,
+        run_id: str,
         log: Any,
         eval_id: str | None = None,
         task_id: str | None = None,
@@ -388,8 +390,10 @@ class LoggingMixin:
                 if local_path and local_path.exists():
                     uploaded_paths.append(location_str)
                     try:
-                        mlflow.log_artifact(
-                            str(local_path), artifact_path=f"{TAG_PREFIX}/logs"
+                        client.log_artifact(
+                            run_id=run_id,
+                            local_path=str(local_path),
+                            artifact_path=f"{TAG_PREFIX}/logs",
                         )
                     except Exception:
                         _LOG.debug(f"Could not upload log: {local_path}", exc_info=True)
@@ -420,8 +424,10 @@ class LoggingMixin:
                         if path_str not in uploaded_paths:
                             uploaded_paths.append(path_str)
                             try:
-                                mlflow.log_artifact(
-                                    str(p), artifact_path=f"{TAG_PREFIX}/logs"
+                                client.log_artifact(
+                                    run_id=run_id,
+                                    local_path=str(p),
+                                    artifact_path=f"{TAG_PREFIX}/logs",
                                 )
                             except Exception:
                                 _LOG.debug(f"Could not upload log: {p}", exc_info=True)
@@ -436,12 +442,12 @@ class LoggingMixin:
                     if len(logged_paths) == 1
                     else f"{TAG_PREFIX}.log_file_{idx + 1}"
                 )
-                self._log_param_safe(mlflow, param_key, path)
+                self._log_param_safe(client, run_id, param_key, path)
 
     @staticmethod
-    def _log_param_safe(mlflow: Any, key: str, value: str) -> None:
+    def _log_param_safe(client: Any, run_id: str, key: str, value: str) -> None:
         """Log param, ignoring errors (e.g., duplicate keys)."""
         try:
-            mlflow.log_param(key, value)
+            client.log_param(run_id, key, value)
         except Exception:
             _LOG.debug(f"Could not log param {key}", exc_info=True)

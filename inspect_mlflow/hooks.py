@@ -319,8 +319,16 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
             # Log hierarchical trace - activate the specific run context
             if cfg.log_traces:
                 try:
-                    with mlflow.start_run(run_id=run_id):
-                        self._log_sample_trace(mlflow, task_name, eval_id, sample)
+                    trace_id = self._log_sample_trace(
+                        mlflow, task_name, eval_id, sample
+                    )
+                    if trace_id:
+                        try:
+                            client.link_traces_to_run(
+                                trace_ids=[trace_id], run_id=run_id
+                            )
+                        except Exception:
+                            _LOG.debug("Could not link trace to run", exc_info=True)
                 except Exception:
                     _LOG.debug("Could not log trace", exc_info=True)
 
@@ -391,16 +399,16 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
             client.log_metric(run_id, f"{TAG_PREFIX}.accuracy", accuracy)
             self._log_usage_metrics_client(client, run_id, eval_id)
 
-            # Log artifacts for this task - need to activate the run context
+            # Log artifacts for this task via client APIs (safe for parallel tasks)
             if cfg.log_artifacts:
-                with mlflow.start_run(run_id=run_id):
-                    self._log_tables_for_task(mlflow, eval_id)
-                    self._log_task_inspect_logs(
-                        mlflow,
-                        log,
-                        eval_id=eval_id,
-                        task_id=task_id,
-                    )
+                self._log_tables_for_task(client, run_id, eval_id)
+                self._log_task_inspect_logs(
+                    client,
+                    run_id,
+                    log,
+                    eval_id=eval_id,
+                    task_id=task_id,
+                )
 
             # End the run for this task using client API
             with self._lock:

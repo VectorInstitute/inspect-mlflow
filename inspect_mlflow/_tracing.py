@@ -34,21 +34,26 @@ class TracingMixin:
         task_name: str,
         eval_id: str,
         sample: Any,
-    ) -> None:
-        """Create a hierarchical trace for a sample execution."""
+    ) -> str | None:
+        """Create a hierarchical trace for a sample execution.
+
+        Returns the generated trace_id when available.
+        """
         if not self._trace_supported:
-            return
+            return None
 
         sample_id = _obj_get(sample, "id")
         sample_input = _obj_get(sample, "input")
         sample_output = self._get_sample_output_text(sample)
         scores = _obj_get(sample, "scores")
         events = _obj_get(sample, "events")
+        trace_id: str | None = None
 
         try:
             with mlflow.start_span(
                 name=f"sample.{sample_id or 'unknown'}", span_type=SPAN_TYPE_AGENT
             ) as root_span:
+                trace_id = str(getattr(root_span, "trace_id", "") or "") or None
                 try:
                     mlflow.update_current_trace(
                         tags={
@@ -79,9 +84,12 @@ class TracingMixin:
                 if isinstance(events, list):
                     self._log_event_spans(mlflow, events, task_name, eval_id, sample_id)
 
+            return trace_id
+
         except Exception:
             self._trace_supported = False
             _LOG.debug("MLflow tracing disabled for this run", exc_info=True)
+            return None
 
     def _log_event_spans(
         self,
