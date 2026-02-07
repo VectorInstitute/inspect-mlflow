@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib.util
 import logging
 import threading
-from collections import Counter, defaultdict
 from typing import Any
 
 from inspect_ai.hooks import (
@@ -19,17 +18,23 @@ from inspect_ai.hooks import (
     TaskStart,
     hooks,
 )
-from inspect_ai.scorer import CORRECT
 
+from ._autolog import enable_autolog
+from ._hook_helpers import (
+    default_experiment_name,
+    ensure_experiment,
+    get_sample_output_text,
+    get_task_name,
+    is_correct,
+    rows_to_columns,
+    scores_to_dict,
+)
 from ._logging import LoggingMixin
+from ._state import initialize_tracking_state, reset_run_state
 from ._tracing import TracingMixin
 from ._utils import (
     TAG_PREFIX,
-    _clean_token,
-    _iter_scores,
-    _jsonable,
     _obj_get,
-    _to_json,
 )
 from .config import MLflowSettings
 
@@ -47,39 +52,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
         self._run_logging_enabled: bool = False
         self._autolog_enabled: bool = False
         self._trace_supported: bool = True
-
-        # Eval-set level info (persists across retries within an eval-set)
-        self._eval_set_id: str | None = None
-        self._eval_set_log_dir: str | None = None
-        self._eval_set_run_count: int = 0  # tracks retry attempts
-
-        # Run-level info (from RunStart, shared across tasks in a single run)
-        self._experiment_name: str | None = None
-        self._all_task_names: list[str] | None = None
-
-        # Per-task tracking (keyed by eval_id for parallel execution support)
-        self._active_runs: dict[str, str] = {}  # eval_id -> mlflow_run_id
-        self._task_names_by_eval_id: dict[str, str] = {}
-        self._task_sample_counts: dict[str, int] = {}  # eval_id -> sample count
-        self._task_correct_counts: dict[str, int] = {}  # eval_id -> correct count
-        self._task_sample_steps: dict[str, int] = {}  # eval_id -> step counter
-        self._task_models: dict[str, set[str]] = defaultdict(set)  # eval_id -> models
-        self._task_raw_scores: dict[str, dict[tuple[str, str], Counter[str]]] = (
-            defaultdict(lambda: defaultdict(Counter))
-        )
-        self._task_usage_totals: dict[str, dict[str, dict[str, int]]] = defaultdict(
-            lambda: defaultdict(dict)
-        )
-        self._task_settings: dict[str, MLflowSettings] = {}
-
-        # Table rows for batch logging (per eval_id)
-        self._task_sample_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
-        self._task_sample_score_rows: dict[str, list[dict[str, Any]]] = defaultdict(
-            list
-        )
-        self._task_rows_data: dict[str, list[dict[str, Any]]] = defaultdict(list)
-        self._task_event_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
-        self._task_usage_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        initialize_tracking_state(self)
 
     @property
     def settings(self) -> MLflowSettings:
@@ -472,26 +445,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
 
             # Clean up run-level state (eval_set state is managed by on_eval_set_end)
             with self._lock:
-                self._active_runs.clear()
-                self._inspect_run_id = None
-                self._experiment_name = None
-                self._all_task_names = None
-                self._run_logging_enabled = False
-
-                # Clear per-task state
-                self._task_sample_counts.clear()
-                self._task_correct_counts.clear()
-                self._task_sample_steps.clear()
-                self._task_names_by_eval_id.clear()
-                self._task_models.clear()
-                self._task_raw_scores.clear()
-                self._task_usage_totals.clear()
-                self._task_settings.clear()
-                self._task_sample_rows.clear()
-                self._task_sample_score_rows.clear()
-                self._task_rows_data.clear()
-                self._task_event_rows.clear()
-                self._task_usage_rows.clear()
+                reset_run_state(self)
 
             _LOG.info("MLflow tracking cleanup completed")
 
@@ -504,48 +458,11 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
 
     def _enable_autolog(self, mlflow: Any, models: list[str]) -> None:
         """Enable MLflow autolog for specified LLM libraries."""
-        autolog_map = {
-            "openai": ("mlflow.openai", "autolog"),
-            "anthropic": ("mlflow.anthropic", "autolog"),
-            "langchain": ("mlflow.langchain", "autolog"),
-            "litellm": ("mlflow.litellm", "autolog"),
-            "mistral": ("mlflow.mistral", "autolog"),
-            "groq": ("mlflow.groq", "autolog"),
-            "cohere": ("mlflow.cohere", "autolog"),
-            "gemini": ("mlflow.gemini", "autolog"),
-            "bedrock": ("mlflow.bedrock", "autolog"),
-        }
-        dependency_map = {
-            "gemini": "google.generativeai",
-            "bedrock": "boto3",
-        }
-
-        enabled_any = False
-        for model in models:
-            model_lower = model.lower()
-            if model_lower not in autolog_map:
-                continue
-
-            module_name, func_name = autolog_map[model_lower]
-
-            # Check if both the MLflow flavor module and provider library exist.
-            if importlib.util.find_spec(module_name) is None:
-                continue
-
-            lib_name = dependency_map.get(model_lower, model_lower)
-            if importlib.util.find_spec(lib_name) is None:
-                continue
-
-            try:
-                # Dynamically import and call autolog
-                module = importlib.import_module(module_name)
-                autolog_func = getattr(module, func_name, None)
-                if autolog_func is not None:
-                    autolog_func(log_traces=True)
-                    enabled_any = True
-                    _LOG.debug(f"Enabled MLflow autolog for {model}")
-            except Exception:
-                _LOG.debug(f"Could not enable autolog for {model}", exc_info=True)
+        enabled_any = enable_autolog(
+            models,
+            find_spec=importlib.util.find_spec,
+            import_module=importlib.import_module,
+        )
 
         self._autolog_enabled = enabled_any
         if enabled_any:
@@ -572,94 +489,31 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
 
     def _is_correct(self, sample: Any) -> bool:
         """Check if a sample is correct based on scores."""
-        scores = getattr(sample, "scores", None)
-        if not scores:
-            return False
-        for _, score in _iter_scores(scores):
-            value = getattr(score, "value", score)
-            if value in {CORRECT, True}:
-                return True
-        return False
+        return is_correct(sample)
 
     def _ensure_experiment(self, mlflow: Any, name: str) -> None:
         """Create or get experiment by name."""
-        client = mlflow.tracking.MlflowClient()
-        existing = client.get_experiment_by_name(name)
-
-        if (
-            existing is not None
-            and getattr(existing, "lifecycle_stage", None) == "deleted"
-        ):
-            client.restore_experiment(existing.experiment_id)
-            existing = client.get_experiment(existing.experiment_id)
-
-        if existing is None:
-            experiment_id = client.create_experiment(name)
-        else:
-            experiment_id = existing.experiment_id
-
-        mlflow.set_experiment(experiment_id=experiment_id)
+        ensure_experiment(mlflow, name)
 
     def _default_experiment_name(
         self, run_id: str | None, task_names: list[str] | None
     ) -> str:
         """Generate default experiment name."""
-        base = "eval"
-        if task_names:
-            base = _clean_token(str(task_names[0]), max_len=48)
-        if run_id:
-            return f"{TAG_PREFIX}-{base}-{run_id[:8]}"
-        return f"{TAG_PREFIX}-{base}"
+        return default_experiment_name(run_id, task_names)
 
     def _get_task_name(self, data: Any, log: Any) -> str | None:
         """Extract task name from TaskEnd data or log."""
-        spec = getattr(data, "spec", None)
-        if spec:
-            name = getattr(spec, "task", None) or getattr(spec, "name", None)
-            if name:
-                return str(name)
-
-        eval_info = _obj_get(log, "eval")
-        if eval_info:
-            for key in ("task_display_name", "task", "task_registry_name"):
-                value = _obj_get(eval_info, key)
-                if value:
-                    return str(value)
-        return None
+        return get_task_name(data, log)
 
     def _get_sample_output_text(self, sample: Any) -> str | None:
         """Extract output text from sample."""
-        if sample is None:
-            return None
-        output = getattr(sample, "output", None)
-        if output is None:
-            return None
-        for key in ("completion", "text"):
-            value = getattr(output, key, None)
-            if value:
-                return str(value)
-        message = getattr(output, "message", None)
-        if message:
-            content = getattr(message, "content", None)
-            if content:
-                return str(content)
-        return _to_json(output)
+        return get_sample_output_text(sample)
 
     def _scores_to_dict(self, scores: Any) -> dict[str, Any]:
         """Convert scores to JSON-serializable dict."""
-        output: dict[str, Any] = {}
-        for name, score in _iter_scores(scores):
-            output[str(name)] = _jsonable(score)
-        return output
+        return scores_to_dict(scores)
 
     @staticmethod
     def _rows_to_columns(rows: list[dict[str, Any]]) -> dict[str, list[Any]]:
         """Convert list of row dicts to column dict (for MLflow tables)."""
-        columns: dict[str, list[Any]] = {}
-        for row in rows:
-            for key in row.keys():
-                columns.setdefault(str(key), [])
-        for row in rows:
-            for key in columns.keys():
-                columns[key].append(row.get(key))
-        return columns
+        return rows_to_columns(rows)

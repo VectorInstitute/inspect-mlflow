@@ -1,0 +1,65 @@
+"""State initialization and reset helpers for MLflow hooks."""
+
+from __future__ import annotations
+
+from collections import Counter, defaultdict
+from typing import Any
+
+from .config import MLflowSettings
+
+
+def initialize_tracking_state(hook: Any) -> None:
+    """Initialize eval-set, run, and per-task state containers on a hook."""
+    # Eval-set level info (persists across retries within an eval-set)
+    hook._eval_set_id = None
+    hook._eval_set_log_dir = None
+    hook._eval_set_run_count = 0
+
+    # Run-level info (from RunStart, shared across tasks in a single run)
+    hook._experiment_name = None
+    hook._all_task_names = None
+
+    # Per-task tracking (keyed by eval_id for parallel execution support)
+    hook._active_runs = {}  # eval_id -> mlflow_run_id
+    hook._task_names_by_eval_id = {}
+    hook._task_sample_counts = {}  # eval_id -> sample count
+    hook._task_correct_counts = {}  # eval_id -> correct count
+    hook._task_sample_steps = {}  # eval_id -> step counter
+    hook._task_models = defaultdict(set)  # eval_id -> models
+    hook._task_raw_scores = defaultdict(lambda: defaultdict(Counter))
+    hook._task_usage_totals = defaultdict(lambda: defaultdict(dict))
+    hook._task_settings: dict[str, MLflowSettings] = {}
+
+    # Table rows for batch logging (per eval_id)
+    hook._task_sample_rows = defaultdict(list)
+    hook._task_sample_score_rows = defaultdict(list)
+    hook._task_rows_data = defaultdict(list)
+    hook._task_event_rows = defaultdict(list)
+    hook._task_usage_rows = defaultdict(list)
+
+
+def reset_run_state(hook: Any) -> None:
+    """Clear run-level and per-task state after a run ends.
+
+    Eval-set state is intentionally not reset here.
+    """
+    hook._active_runs.clear()
+    hook._inspect_run_id = None
+    hook._experiment_name = None
+    hook._all_task_names = None
+    hook._run_logging_enabled = False
+
+    # Clear per-task state
+    hook._task_sample_counts.clear()
+    hook._task_correct_counts.clear()
+    hook._task_sample_steps.clear()
+    hook._task_names_by_eval_id.clear()
+    hook._task_models.clear()
+    hook._task_raw_scores.clear()
+    hook._task_usage_totals.clear()
+    hook._task_settings.clear()
+    hook._task_sample_rows.clear()
+    hook._task_sample_score_rows.clear()
+    hook._task_rows_data.clear()
+    hook._task_event_rows.clear()
+    hook._task_usage_rows.clear()
