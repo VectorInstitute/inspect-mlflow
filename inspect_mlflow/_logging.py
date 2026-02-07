@@ -378,6 +378,12 @@ class LoggingMixin:
         """Upload Inspect log file for a specific task and log its path."""
         logged_paths: list[str] = []
         uploaded_paths: list[str] = []
+        search_dirs: list[Path] = []
+
+        def add_search_dir(path: Path) -> None:
+            """Add directory once, preserving order."""
+            if path.exists() and path.is_dir() and path not in search_dirs:
+                search_dirs.append(path)
 
         # Get location from the log object
         if log is not None:
@@ -388,6 +394,7 @@ class LoggingMixin:
 
                 local_path = _location_to_local_path(location_str)
                 if local_path and local_path.exists():
+                    add_search_dir(local_path.parent)
                     uploaded_paths.append(location_str)
                     try:
                         client.log_artifact(
@@ -397,6 +404,16 @@ class LoggingMixin:
                         )
                     except Exception:
                         _LOG.debug(f"Could not upload log: {local_path}", exc_info=True)
+
+        # Prefer inspect-provided log dir if available (e.g., custom INSPECT_LOG_DIR).
+        eval_set_log_dir = getattr(self, "_eval_set_log_dir", None)
+        if isinstance(eval_set_log_dir, str) and eval_set_log_dir:
+            local_eval_set_log_dir = _location_to_local_path(eval_set_log_dir)
+            if local_eval_set_log_dir is not None:
+                add_search_dir(local_eval_set_log_dir)
+
+        # Fallback to default Inspect log directory under current working dir.
+        add_search_dir(Path.cwd() / "logs")
 
         # Collect IDs to search for in logs directory
         search_ids: list[str] = []
@@ -412,26 +429,32 @@ class LoggingMixin:
             if log_task_id and str(log_task_id) not in search_ids:
                 search_ids.append(str(log_task_id))
 
-        # Search logs directory for matching files
-        logs_dir = Path.cwd() / "logs"
-        if logs_dir.exists() and search_ids:
-            for search_id in search_ids:
-                for pattern in [f"*_{search_id}.json", f"*_{search_id}.eval"]:
-                    for p in logs_dir.glob(pattern):
-                        path_str = str(p)
-                        if path_str not in logged_paths:
-                            logged_paths.append(path_str)
-                        if path_str not in uploaded_paths:
-                            uploaded_paths.append(path_str)
-                            try:
-                                client.log_artifact(
-                                    run_id=run_id,
-                                    local_path=str(p),
-                                    artifact_path=f"{TAG_PREFIX}/logs",
-                                )
-                            except Exception:
-                                _LOG.debug(f"Could not upload log: {p}", exc_info=True)
-                if uploaded_paths:
+        # Search known log directories for matching files.
+        if search_dirs and search_ids:
+            for logs_dir in search_dirs:
+                found_match = False
+                for search_id in search_ids:
+                    for pattern in [f"*_{search_id}.json", f"*_{search_id}.eval"]:
+                        for p in logs_dir.glob(pattern):
+                            path_str = str(p)
+                            if path_str not in logged_paths:
+                                logged_paths.append(path_str)
+                            if path_str not in uploaded_paths:
+                                uploaded_paths.append(path_str)
+                                try:
+                                    client.log_artifact(
+                                        run_id=run_id,
+                                        local_path=str(p),
+                                        artifact_path=f"{TAG_PREFIX}/logs",
+                                    )
+                                except Exception:
+                                    _LOG.debug(
+                                        f"Could not upload log: {p}", exc_info=True
+                                    )
+                            found_match = True
+                    if found_match:
+                        break
+                if found_match:
                     break
 
         # Log paths as params
