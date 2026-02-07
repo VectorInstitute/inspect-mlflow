@@ -54,14 +54,8 @@ def default_experiment_name(
     return f"{TAG_PREFIX}-{base}"
 
 
-def get_task_name(data: Any, log: Any) -> str | None:
-    """Extract task name from TaskEnd data or log."""
-    spec = getattr(data, "spec", None)
-    if spec:
-        name = getattr(spec, "task", None) or getattr(spec, "name", None)
-        if name:
-            return str(name)
-
+def get_task_name(_data: Any, log: Any) -> str | None:
+    """Extract task name from TaskEnd log metadata."""
     eval_info = _obj_get(log, "eval")
     if eval_info:
         for key in ("task_display_name", "task", "task_registry_name"):
