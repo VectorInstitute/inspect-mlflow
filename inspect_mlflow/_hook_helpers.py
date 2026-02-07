@@ -9,6 +9,7 @@ from inspect_ai.scorer import CORRECT
 from ._utils import (
     TAG_PREFIX,
     _clean_token,
+    _coerce_metric,
     _iter_scores,
     _jsonable,
     _obj_get,
@@ -23,7 +24,10 @@ def is_correct(sample: Any) -> bool:
         return False
     for _, score in _iter_scores(scores):
         value = getattr(score, "value", score)
-        if value in {CORRECT, True}:
+        if value == CORRECT or value is True:
+            return True
+        metric_value = _coerce_metric(value)
+        if metric_value == 1.0:
             return True
     return False
 
