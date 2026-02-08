@@ -213,6 +213,7 @@ When `INSPECT_MLFLOW_LOG_TRACES=true`:
 - each sample creates a root trace span with sample input/output
 - each chat message in `sample.messages` is emitted as a child span (`message.<idx>.<role>`)
 - model/tool/error events are emitted as child spans
+- large traces are bounded (message/event span caps + text truncation) so MLflow UI stays usable
 - traces are logged to the same experiment as the task run and then linked to that run
 
 ## Examples

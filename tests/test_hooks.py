@@ -7,6 +7,11 @@ import pytest
 from inspect_ai.model import ModelOutput
 from inspect_ai.scorer import CORRECT, INCORRECT, NOANSWER, PARTIAL
 from inspect_mlflow._hook_helpers import get_sample_output_text
+from inspect_mlflow._tracing import (
+    TRACE_MAX_EVENT_SPANS,
+    TRACE_MAX_MESSAGE_SPANS,
+    TRACE_MAX_TEXT_CHARS,
+)
 from inspect_mlflow._utils import (
     _clean_key,
     _clean_token,
@@ -345,6 +350,108 @@ class TestMLflowHooks:
 
         assistant_span = span_by_name["message.001.assistant"]
         assert assistant_span.outputs["content"] == "The answer is 4."
+
+    def test_log_sample_trace_caps_large_payloads(self, clean_env):
+        """Trace payloads should be capped so large samples remain viewable."""
+        hooks = MLflowHooks()
+
+        class FakeSpan:
+            def __init__(
+                self,
+                owner: "FakeMlflow",
+                name: str,
+                span_type: str,
+                *,
+                trace_id: str = "trace-1",
+                trace_destination: object | None = None,
+            ) -> None:
+                self.owner = owner
+                self.name = name
+                self.span_type = span_type
+                self.trace_id = trace_id
+                self.trace_destination = trace_destination
+                self.attributes: dict[str, object] = {}
+                self.inputs: dict[str, object] = {}
+                self.outputs: dict[str, object] = {}
+
+            def __enter__(self) -> "FakeSpan":
+                self.owner.spans.append(self)
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def set_attributes(self, attrs: dict[str, object]) -> None:
+                self.attributes.update(attrs)
+
+            def set_inputs(self, inputs: dict[str, object]) -> None:
+                self.inputs.update(inputs)
+
+            def set_outputs(self, outputs: dict[str, object]) -> None:
+                self.outputs.update(outputs)
+
+        class FakeMlflow:
+            def __init__(self) -> None:
+                self.spans: list[FakeSpan] = []
+                self.trace_tags: dict[str, str] = {}
+
+            def start_span(
+                self,
+                name: str,
+                span_type: str,
+                trace_destination: object | None = None,
+            ) -> FakeSpan:
+                return FakeSpan(
+                    self,
+                    name,
+                    span_type,
+                    trace_destination=trace_destination,
+                )
+
+            def update_current_trace(self, tags: dict[str, str]) -> None:
+                self.trace_tags.update(tags)
+
+        long_text = "x" * (TRACE_MAX_TEXT_CHARS + 250)
+        sample = MagicMock()
+        sample.id = "sample-1"
+        sample.input = long_text
+        sample.output = ModelOutput.from_content(
+            model="openai/gpt-4o-mini", content=long_text
+        )
+        sample.scores = {"accuracy": MagicMock(value=1)}
+        sample.messages = [
+            {"role": "user", "content": long_text}
+            for _ in range(TRACE_MAX_MESSAGE_SPANS + 3)
+        ]
+        sample.events = [
+            {"event": "error", "error": long_text}
+            for _ in range(TRACE_MAX_EVENT_SPANS + 2)
+        ]
+
+        mlflow = FakeMlflow()
+        hooks._log_sample_trace(
+            mlflow=mlflow, task_name="task-a", eval_id="eval-1", sample=sample
+        )
+
+        span_by_name = {span.name: span for span in mlflow.spans}
+
+        # Message spans are capped and a synthetic truncation span is emitted.
+        message_spans = [
+            span for span in mlflow.spans if span.name.startswith("message.")
+        ]
+        assert len(message_spans) == TRACE_MAX_MESSAGE_SPANS
+        assert "messages.truncated" in span_by_name
+
+        # Event spans are capped and a synthetic truncation span is emitted.
+        error_spans = [span for span in mlflow.spans if span.name == "error"]
+        assert len(error_spans) == TRACE_MAX_EVENT_SPANS
+        assert "events.truncated" in span_by_name
+
+        # Large string fields are truncated.
+        root_span = span_by_name["sample.sample-1"]
+        assert "[truncated " in str(root_span.inputs["input"])
+        first_message_span = span_by_name["message.000.user"]
+        assert "[truncated " in str(first_message_span.inputs["content"])
 
     def test_enable_autolog_uses_supported_kwargs_only(self, clean_env, monkeypatch):
         """Autolog should work when flavor autolog doesn't accept log_models."""

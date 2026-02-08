@@ -18,6 +18,11 @@ from ._utils import (
 
 _LOG = logging.getLogger(__name__)
 
+# Guardrails to keep traces small enough for MLflow UI rendering.
+TRACE_MAX_EVENT_SPANS = 400
+TRACE_MAX_MESSAGE_SPANS = 200
+TRACE_MAX_TEXT_CHARS = 4000
+
 
 class _TracingHost(Protocol):
     """Protocol describing hook attributes/methods used by TracingMixin."""
@@ -86,6 +91,16 @@ class TracingMixin:
     - self._get_sample_output_text(sample) -> str | None
     """
 
+    @staticmethod
+    def _truncate_trace_text(value: Any, max_chars: int = TRACE_MAX_TEXT_CHARS) -> Any:
+        """Limit very large text payloads so trace retrieval/UI remains usable."""
+        if not isinstance(value, str):
+            return value
+        if len(value) <= max_chars:
+            return value
+        truncated_chars = len(value) - max_chars
+        return f"{value[:max_chars]}...[truncated {truncated_chars} chars]"
+
     def _log_sample_trace(
         self: _TracingHost,
         mlflow: Any,
@@ -146,13 +161,17 @@ class TracingMixin:
                     }
                 )
 
-                root_inputs: dict[str, Any] = {"input": _to_json(sample_input)}
+                root_inputs: dict[str, Any] = {
+                    "input": TracingMixin._truncate_trace_text(_to_json(sample_input))
+                }
                 if isinstance(messages, list):
                     root_inputs["messages_count"] = len(messages)
                 root_span.set_inputs(root_inputs)
                 root_span.set_outputs(
                     {
-                        "output": sample_output or "",
+                        "output": TracingMixin._truncate_trace_text(
+                            sample_output or ""
+                        ),
                         "scores": self._scores_to_dict(scores),
                     }
                 )
@@ -180,7 +199,7 @@ class TracingMixin:
         sample_id: Any,
     ) -> None:
         """Create spans for model and tool events within a sample."""
-        for idx, event in enumerate(events):
+        for idx, event in enumerate(events[:TRACE_MAX_EVENT_SPANS]):
             event_type = _obj_get(event, "event") or _obj_get(event, "type")
 
             if event_type == "model":
@@ -196,6 +215,29 @@ class TracingMixin:
                     mlflow, event, idx, task_name, eval_id, sample_id
                 )
 
+        if len(events) > TRACE_MAX_EVENT_SPANS:
+            with mlflow.start_span(
+                name="events.truncated",
+                span_type=SPAN_TYPE_CHAIN,
+            ) as span:
+                span.set_attributes(
+                    {
+                        "inspect.event_count_total": len(events),
+                        "inspect.event_count_logged": TRACE_MAX_EVENT_SPANS,
+                        "inspect.task": task_name,
+                        "inspect.eval_id": str(eval_id),
+                        "inspect.sample_id": str(sample_id) if sample_id else "",
+                    }
+                )
+                span.set_outputs(
+                    {
+                        "note": (
+                            f"Truncated event spans from {len(events)} to "
+                            f"{TRACE_MAX_EVENT_SPANS} to keep trace size manageable."
+                        )
+                    }
+                )
+
     def _log_message_spans(
         self: _TracingHost,
         mlflow: Any,
@@ -205,18 +247,24 @@ class TracingMixin:
         sample_id: Any,
     ) -> None:
         """Create spans for conversation messages so they are easy to inspect."""
-        for idx, message in enumerate(messages):
+        for idx, message in enumerate(messages[:TRACE_MAX_MESSAGE_SPANS]):
             role_obj = _obj_get(message, "role")
             role_value = _obj_get(role_obj, "value")
             role = str(role_value if role_value is not None else role_obj or "unknown")
             role_lower = role.lower()
 
-            content = _to_json(_obj_get(message, "content"))
+            content = TracingMixin._truncate_trace_text(
+                _to_json(_obj_get(message, "content"))
+            )
             source = _obj_get(message, "source")
             model = _obj_get(message, "model")
             stop_reason = _obj_get(message, "stop_reason")
-            tool_calls = _to_json(_obj_get(message, "tool_calls"))
-            tool_call_id = _to_json(_obj_get(message, "tool_call_id"))
+            tool_calls = TracingMixin._truncate_trace_text(
+                _to_json(_obj_get(message, "tool_calls"))
+            )
+            tool_call_id = TracingMixin._truncate_trace_text(
+                _to_json(_obj_get(message, "tool_call_id"))
+            )
 
             with mlflow.start_span(
                 name=f"message.{idx:03d}.{_clean_token(role, 24)}",
@@ -239,12 +287,37 @@ class TracingMixin:
                     "content": content,
                     "tool_calls": tool_calls,
                     "tool_call_id": tool_call_id,
-                    "stop_reason": _to_json(stop_reason),
+                    "stop_reason": TracingMixin._truncate_trace_text(
+                        _to_json(stop_reason)
+                    ),
                 }
                 if role_lower in {"assistant", "tool"}:
                     span.set_outputs(payload)
                 else:
                     span.set_inputs(payload)
+
+        if len(messages) > TRACE_MAX_MESSAGE_SPANS:
+            with mlflow.start_span(
+                name="messages.truncated",
+                span_type=SPAN_TYPE_CHAIN,
+            ) as span:
+                span.set_attributes(
+                    {
+                        "inspect.message_count_total": len(messages),
+                        "inspect.message_count_logged": TRACE_MAX_MESSAGE_SPANS,
+                        "inspect.task": task_name,
+                        "inspect.eval_id": str(eval_id),
+                        "inspect.sample_id": str(sample_id) if sample_id else "",
+                    }
+                )
+                span.set_outputs(
+                    {
+                        "note": (
+                            f"Truncated message spans from {len(messages)} to "
+                            f"{TRACE_MAX_MESSAGE_SPANS} to keep trace size manageable."
+                        )
+                    }
+                )
 
     def _log_model_event_span(
         self: _TracingHost,
@@ -268,7 +341,9 @@ class TracingMixin:
             )
 
             input_data = _obj_get(event, "input")
-            span.set_inputs({"messages": _to_json(input_data)})
+            span.set_inputs(
+                {"messages": TracingMixin._truncate_trace_text(_to_json(input_data))}
+            )
 
             output = _obj_get(event, "output")
             completion = _obj_get(output, "completion")
@@ -276,7 +351,9 @@ class TracingMixin:
 
             span.set_outputs(
                 {
-                    "completion": _to_json(completion),
+                    "completion": TracingMixin._truncate_trace_text(
+                        _to_json(completion)
+                    ),
                     "usage": usage,
                 }
             )
@@ -306,15 +383,23 @@ class TracingMixin:
             span.set_inputs(
                 {
                     "function": function_name,
-                    "arguments": _to_json(_obj_get(event, "arguments")),
+                    "arguments": TracingMixin._truncate_trace_text(
+                        _to_json(_obj_get(event, "arguments"))
+                    ),
                 }
             )
 
             error = _obj_get(event, "error")
             span.set_outputs(
                 {
-                    "result": _to_json(_obj_get(event, "result")),
-                    "error": _to_json(error) if error else None,
+                    "result": TracingMixin._truncate_trace_text(
+                        _to_json(_obj_get(event, "result"))
+                    ),
+                    "error": (
+                        TracingMixin._truncate_trace_text(_to_json(error))
+                        if error
+                        else None
+                    ),
                 }
             )
 
@@ -330,4 +415,10 @@ class TracingMixin:
         """Create a span for an error event."""
         with mlflow.start_span(name="error", span_type=SPAN_TYPE_CHAIN) as span:
             span.set_attributes({"inspect.event_index": idx})
-            span.set_outputs({"error": _to_json(_obj_get(event, "error"))})
+            span.set_outputs(
+                {
+                    "error": TracingMixin._truncate_trace_text(
+                        _to_json(_obj_get(event, "error"))
+                    )
+                }
+            )
