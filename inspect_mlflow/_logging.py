@@ -30,6 +30,7 @@ class _LoggingHost(Protocol):
     _task_raw_scores: dict[str, dict[tuple[str, str], Counter[str]]]
     _task_sample_score_rows: dict[str, list[dict[str, Any]]]
     _task_sample_rows: dict[str, list[dict[str, Any]]]
+    _task_message_rows: dict[str, list[dict[str, Any]]]
     _task_rows_data: dict[str, list[dict[str, Any]]]
     _task_event_rows: dict[str, list[dict[str, Any]]]
     _task_usage_rows: dict[str, list[dict[str, Any]]]
@@ -54,6 +55,7 @@ class LoggingMixin:
     - self._task_raw_scores: dict[str, dict[tuple[str, str], Counter[str]]]
     - self._task_sample_score_rows: dict[str, list[dict[str, Any]]]
     - self._task_sample_rows: dict[str, list[dict[str, Any]]]
+    - self._task_message_rows: dict[str, list[dict[str, Any]]]
     - self._task_rows_data: dict[str, list[dict[str, Any]]]
     - self._task_event_rows: dict[str, list[dict[str, Any]]]
     - self._task_usage_rows: dict[str, list[dict[str, Any]]]
@@ -352,6 +354,31 @@ class LoggingMixin:
             for key, value in normalized_usage.items():
                 totals[key] = int(totals.get(key, 0)) + int(value)
 
+    def _record_sample_messages(
+        self: _LoggingHost, eval_id: str, task_name: str, sample_id: Any, sample: Any
+    ) -> None:
+        """Record chat messages for conversation-oriented analysis in MLflow."""
+        messages = _obj_get(sample, "messages")
+        if not isinstance(messages, list):
+            return
+
+        for idx, message in enumerate(messages):
+            self._task_message_rows[eval_id].append(
+                {
+                    "task_name": task_name,
+                    "eval_id": eval_id,
+                    "sample_id": sample_id,
+                    "message_index": idx,
+                    "role": _obj_get(message, "role"),
+                    "source": _obj_get(message, "source"),
+                    "content": _to_json(_obj_get(message, "content")),
+                    "tool_calls": _to_json(_obj_get(message, "tool_calls")),
+                    "tool_call_id": _obj_get(message, "tool_call_id"),
+                    "model": _obj_get(message, "model"),
+                    "stop_reason": _obj_get(message, "stop_reason"),
+                }
+            )
+
     def _record_sample_events(
         self: _LoggingHost, eval_id: str, task_name: str, sample_id: Any, sample: Any
     ) -> None:
@@ -402,6 +429,7 @@ class LoggingMixin:
         """Log all accumulated tables for a specific task as artifacts."""
         tables = [
             ("samples", self._task_sample_rows.get(eval_id, [])),
+            ("messages", self._task_message_rows.get(eval_id, [])),
             ("sample_scores", self._task_sample_score_rows.get(eval_id, [])),
             ("tasks", self._task_rows_data.get(eval_id, [])),
             ("events", self._task_event_rows.get(eval_id, [])),

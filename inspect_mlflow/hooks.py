@@ -73,6 +73,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
     _task_usage_totals: dict[str, dict[str, dict[str, int]]]
     _task_settings: dict[str, MLflowSettings]
     _task_sample_rows: dict[str, list[dict[str, Any]]]
+    _task_message_rows: dict[str, list[dict[str, Any]]]
     _task_sample_score_rows: dict[str, list[dict[str, Any]]]
     _task_rows_data: dict[str, list[dict[str, Any]]]
     _task_event_rows: dict[str, list[dict[str, Any]]]
@@ -376,11 +377,13 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
                     client, run_id, eval_id, task_name, scores, step
                 )
 
+            sample_id = _obj_get(sample, "id")
+
             # Record sample data for tables
             self._record_sample_row(eval_id, task_name, sample, scores)
+            self._record_sample_messages(eval_id, task_name, sample_id, sample)
 
             # Record usage and events
-            sample_id = _obj_get(sample, "id")
             self._record_sample_usage(eval_id, task_name, sample_id, sample)
             self._record_sample_events(eval_id, task_name, sample_id, sample)
 

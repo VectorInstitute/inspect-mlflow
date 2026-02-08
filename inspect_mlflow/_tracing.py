@@ -37,6 +37,15 @@ class _TracingHost(Protocol):
         sample_id: Any,
     ) -> None: ...
 
+    def _log_message_spans(
+        self,
+        mlflow: Any,
+        messages: list[Any],
+        task_name: str,
+        eval_id: str,
+        sample_id: Any,
+    ) -> None: ...
+
     def _log_model_event_span(
         self,
         mlflow: Any,
@@ -96,6 +105,7 @@ class TracingMixin:
         sample_output = self._get_sample_output_text(sample)
         scores = _obj_get(sample, "scores")
         events = _obj_get(sample, "events")
+        messages = _obj_get(sample, "messages")
         trace_id: str | None = None
 
         try:
@@ -122,13 +132,21 @@ class TracingMixin:
                     }
                 )
 
-                root_span.set_inputs({"input": _to_json(sample_input)})
+                root_inputs: dict[str, Any] = {"input": _to_json(sample_input)}
+                if isinstance(messages, list):
+                    root_inputs["messages_count"] = len(messages)
+                root_span.set_inputs(root_inputs)
                 root_span.set_outputs(
                     {
                         "output": sample_output or "",
                         "scores": self._scores_to_dict(scores),
                     }
                 )
+
+                if isinstance(messages, list):
+                    self._log_message_spans(
+                        mlflow, messages, task_name, eval_id, sample_id
+                    )
 
                 if isinstance(events, list):
                     self._log_event_spans(mlflow, events, task_name, eval_id, sample_id)
@@ -163,6 +181,56 @@ class TracingMixin:
                 self._log_error_event_span(
                     mlflow, event, idx, task_name, eval_id, sample_id
                 )
+
+    def _log_message_spans(
+        self: _TracingHost,
+        mlflow: Any,
+        messages: list[Any],
+        task_name: str,
+        eval_id: str,
+        sample_id: Any,
+    ) -> None:
+        """Create spans for conversation messages so they are easy to inspect."""
+        for idx, message in enumerate(messages):
+            role_obj = _obj_get(message, "role")
+            role_value = _obj_get(role_obj, "value")
+            role = str(role_value if role_value is not None else role_obj or "unknown")
+            role_lower = role.lower()
+
+            content = _to_json(_obj_get(message, "content"))
+            source = _obj_get(message, "source")
+            model = _obj_get(message, "model")
+            stop_reason = _obj_get(message, "stop_reason")
+            tool_calls = _to_json(_obj_get(message, "tool_calls"))
+            tool_call_id = _to_json(_obj_get(message, "tool_call_id"))
+
+            with mlflow.start_span(
+                name=f"message.{idx:03d}.{_clean_token(role, 24)}",
+                span_type=SPAN_TYPE_CHAIN,
+            ) as span:
+                attrs: dict[str, Any] = {
+                    "inspect.message_index": idx,
+                    "inspect.message_role": role,
+                    "inspect.task": task_name,
+                    "inspect.eval_id": str(eval_id),
+                    "inspect.sample_id": str(sample_id) if sample_id else "",
+                }
+                if source is not None:
+                    attrs["inspect.message_source"] = str(source)
+                if model is not None:
+                    attrs["inspect.message_model"] = str(model)
+                span.set_attributes(attrs)
+
+                payload = {
+                    "content": content,
+                    "tool_calls": tool_calls,
+                    "tool_call_id": tool_call_id,
+                    "stop_reason": _to_json(stop_reason),
+                }
+                if role_lower in {"assistant", "tool"}:
+                    span.set_outputs(payload)
+                else:
+                    span.set_inputs(payload)
 
     def _log_model_event_span(
         self: _TracingHost,

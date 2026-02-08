@@ -248,6 +248,92 @@ class TestMLflowHooks:
         assert "accuracy" in result
         assert "f1" in result
 
+    def test_log_sample_trace_emits_message_spans(self, clean_env):
+        """Conversation messages should be visible in MLflow trace spans."""
+        hooks = MLflowHooks()
+
+        class FakeSpan:
+            def __init__(
+                self,
+                owner: "FakeMlflow",
+                name: str,
+                span_type: str,
+                *,
+                trace_id: str = "trace-1",
+            ) -> None:
+                self.owner = owner
+                self.name = name
+                self.span_type = span_type
+                self.trace_id = trace_id
+                self.attributes: dict[str, object] = {}
+                self.inputs: dict[str, object] = {}
+                self.outputs: dict[str, object] = {}
+
+            def __enter__(self) -> "FakeSpan":
+                self.owner.spans.append(self)
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def set_attributes(self, attrs: dict[str, object]) -> None:
+                self.attributes.update(attrs)
+
+            def set_inputs(self, inputs: dict[str, object]) -> None:
+                self.inputs.update(inputs)
+
+            def set_outputs(self, outputs: dict[str, object]) -> None:
+                self.outputs.update(outputs)
+
+        class FakeMlflow:
+            def __init__(self) -> None:
+                self.spans: list[FakeSpan] = []
+                self.trace_tags: dict[str, str] = {}
+
+            def start_span(self, name: str, span_type: str) -> FakeSpan:
+                return FakeSpan(self, name, span_type)
+
+            def update_current_trace(self, tags: dict[str, str]) -> None:
+                self.trace_tags.update(tags)
+
+        sample = MagicMock()
+        sample.id = "sample-1"
+        sample.input = "What is 2 + 2?"
+        sample.output = ModelOutput.from_content(
+            model="openai/gpt-4o-mini", content="The answer is 4."
+        )
+        sample.scores = {"accuracy": MagicMock(value=1)}
+        sample.messages = [
+            {"role": "user", "content": "What is 2 + 2?"},
+            {
+                "role": "assistant",
+                "content": "The answer is 4.",
+                "model": "openai/gpt-4o-mini",
+            },
+        ]
+        sample.events = []
+
+        mlflow = FakeMlflow()
+        trace_id = hooks._log_sample_trace(
+            mlflow=mlflow, task_name="task-a", eval_id="eval-1", sample=sample
+        )
+
+        assert trace_id == "trace-1"
+
+        span_by_name = {span.name: span for span in mlflow.spans}
+        assert "sample.sample-1" in span_by_name
+        assert "message.000.user" in span_by_name
+        assert "message.001.assistant" in span_by_name
+
+        root_span = span_by_name["sample.sample-1"]
+        assert root_span.inputs["messages_count"] == 2
+
+        user_span = span_by_name["message.000.user"]
+        assert user_span.inputs["content"] == "What is 2 + 2?"
+
+        assistant_span = span_by_name["message.001.assistant"]
+        assert assistant_span.outputs["content"] == "The answer is 4."
+
     def test_enable_autolog_uses_supported_kwargs_only(self, clean_env, monkeypatch):
         """Autolog should work when flavor autolog doesn't accept log_models."""
         hooks = MLflowHooks()
@@ -297,6 +383,30 @@ class TestMLflowHooks:
         assert result["a"] == [1, 3, 5]
         assert result["b"] == [2, None, 6]
         assert result["c"] == [None, None, 7]
+
+    def test_log_tables_for_task_includes_messages_table(self, clean_env):
+        """Messages table should be written as an MLflow artifact."""
+        hooks = MLflowHooks()
+        client = MagicMock()
+        eval_id = "eval-1"
+
+        hooks._task_message_rows[eval_id].append(
+            {
+                "task_name": "task-a",
+                "eval_id": eval_id,
+                "sample_id": "s1",
+                "message_index": 0,
+                "role": "user",
+                "content": "hello",
+            }
+        )
+
+        hooks._log_tables_for_task(client, "run-1", eval_id)
+
+        artifact_files = [
+            call.kwargs.get("artifact_file") for call in client.log_table.call_args_list
+        ]
+        assert "inspect/messages.json" in artifact_files
 
     def test_log_task_inspect_logs_dedupes_same_file(self, clean_env, tmp_path):
         """Avoid uploading the same log twice when URI and glob find same file."""
@@ -507,6 +617,10 @@ class TestMLflowHooksAsync:
         sample.total_time = 0.0
         sample.working_time = 0.0
         sample.error = None
+        sample.messages = [
+            {"role": "user", "content": "prompt"},
+            {"role": "assistant", "content": "reply"},
+        ]
 
         data = MagicMock()
         data.eval_id = "eval-1"
@@ -516,6 +630,8 @@ class TestMLflowHooksAsync:
 
         assert hooks._task_sample_counts["eval-1"] == 1
         assert len(hooks._task_sample_rows["eval-1"]) == 1
+        assert len(hooks._task_message_rows["eval-1"]) == 2
+        assert hooks._task_message_rows["eval-1"][0]["role"] == "user"
 
     @pytest.mark.asyncio
     async def test_on_task_end_logs_zero_accuracy_for_unscored_tasks(
@@ -917,6 +1033,7 @@ class TestMLflowHooksAsync:
         hooks._task_raw_scores["eval-1"][("task-a", "score")]["1"] = 1
         hooks._task_usage_totals["eval-1"] = {"openai/gpt-4o-mini": {"input_tokens": 1}}
         hooks._task_sample_rows["eval-1"].append({"sample_id": "s1"})
+        hooks._task_message_rows["eval-1"].append({"message_index": 0})
         hooks._task_sample_score_rows["eval-1"].append({"scorer": "acc"})
         hooks._task_rows_data["eval-1"].append({"task_name": "task-a"})
         hooks._task_event_rows["eval-1"].append({"event": "model"})
@@ -957,6 +1074,7 @@ class TestMLflowHooksAsync:
         assert "eval-1" not in hooks._task_raw_scores
         assert "eval-1" not in hooks._task_usage_totals
         assert "eval-1" not in hooks._task_sample_rows
+        assert "eval-1" not in hooks._task_message_rows
         assert "eval-1" not in hooks._task_sample_score_rows
         assert "eval-1" not in hooks._task_rows_data
         assert "eval-1" not in hooks._task_event_rows

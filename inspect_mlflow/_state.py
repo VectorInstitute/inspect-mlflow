@@ -36,6 +36,7 @@ def initialize_tracking_state(hook: Any) -> None:
 
     # Table rows for batch logging (per eval_id)
     hook._task_sample_rows = defaultdict(list)
+    hook._task_message_rows = defaultdict(list)
     hook._task_sample_score_rows = defaultdict(list)
     hook._task_rows_data = defaultdict(list)
     hook._task_event_rows = defaultdict(list)
@@ -67,6 +68,7 @@ def reset_run_state(hook: Any) -> None:
     hook._task_usage_totals.clear()
     hook._task_settings.clear()
     hook._task_sample_rows.clear()
+    hook._task_message_rows.clear()
     hook._task_sample_score_rows.clear()
     hook._task_rows_data.clear()
     hook._task_event_rows.clear()
@@ -96,6 +98,7 @@ def clear_task_state(
     hook._task_raw_scores.pop(eval_id, None)
     hook._task_usage_totals.pop(eval_id, None)
     hook._task_sample_rows.pop(eval_id, None)
+    hook._task_message_rows.pop(eval_id, None)
     hook._task_sample_score_rows.pop(eval_id, None)
     hook._task_rows_data.pop(eval_id, None)
     hook._task_event_rows.pop(eval_id, None)

@@ -199,11 +199,20 @@ If a task has zero scored samples, `inspect.accuracy` and `inspect.samples_corre
 When `INSPECT_MLFLOW_LOG_ARTIFACTS=true`:
 
 - `inspect/samples.json`
+- `inspect/messages.json`
 - `inspect/sample_scores.json`
 - `inspect/tasks.json`
 - `inspect/events.json`
 - `inspect/model_usage.json`
 - `inspect/logs/<log-file>` (best effort)
+
+### Traces
+
+When `INSPECT_MLFLOW_LOG_TRACES=true`:
+
+- each sample creates a root trace span with sample input/output
+- each chat message in `sample.messages` is emitted as a child span (`message.<idx>.<role>`)
+- model/tool/error events are emitted as child spans
 
 ## Examples
 
