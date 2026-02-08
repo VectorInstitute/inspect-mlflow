@@ -424,9 +424,13 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
             client.set_tag(run_id, f"{TAG_PREFIX}.status", status)
 
             # Log final summary metrics for this task
-            total_samples = self._task_sample_counts.get(eval_id, 0)
-            scored_samples = self._task_scored_counts.get(eval_id, 0)
-            correct_samples = self._task_correct_counts.get(eval_id, 0)
+            total_samples, scored_samples, correct_samples = (
+                self._resolve_task_summary_counts(
+                    eval_id,
+                    log,
+                    preferred_scorer=cfg.accuracy_scorer,
+                )
+            )
             accuracy = (
                 (correct_samples / scored_samples) if scored_samples > 0 else None
             )
@@ -560,6 +564,47 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
             task_scorers=task_scorers,
         )
         return is_correct_selected
+
+    def _resolve_task_summary_counts(
+        self,
+        eval_id: str,
+        log: Any,
+        *,
+        preferred_scorer: str | None = None,
+    ) -> tuple[int, int, int]:
+        """Resolve total/scored/correct counts with task-end reconciliation.
+
+        During Inspect retry/resume, previously successful samples can be reused
+        without re-emitting SampleEnd hook events. TaskEnd log samples include
+        those reused samples, so use them as the final source of truth when
+        available.
+        """
+        total_samples = self._task_sample_counts.get(eval_id, 0)
+        scored_samples = self._task_scored_counts.get(eval_id, 0)
+        correct_samples = self._task_correct_counts.get(eval_id, 0)
+
+        results = _obj_get(log, "results") if log is not None else None
+        results_total_samples = _obj_get(results, "total_samples")
+        if isinstance(results_total_samples, int):
+            total_samples = max(total_samples, results_total_samples)
+
+        samples = _obj_get(log, "samples") if log is not None else None
+        if isinstance(samples, list) and samples:
+            total_samples = len(samples)
+            scored_samples = 0
+            correct_samples = 0
+            for sample in samples:
+                sample_correct = self._sample_correctness(
+                    eval_id,
+                    sample,
+                    preferred_scorer=preferred_scorer,
+                )
+                if sample_correct is not None:
+                    scored_samples += 1
+                if sample_correct is True:
+                    correct_samples += 1
+
+        return total_samples, scored_samples, correct_samples
 
     def _ensure_experiment(self, mlflow: Any, name: str) -> None:
         """Create or get experiment by name."""
