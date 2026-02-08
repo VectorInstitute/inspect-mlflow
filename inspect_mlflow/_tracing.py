@@ -92,6 +92,7 @@ class TracingMixin:
         task_name: str,
         eval_id: str,
         sample: Any,
+        experiment_id: str | None = None,
     ) -> str | None:
         """Create a hierarchical trace for a sample execution.
 
@@ -109,8 +110,21 @@ class TracingMixin:
         trace_id: str | None = None
 
         try:
+            trace_destination: Any | None = None
+            if experiment_id:
+                try:
+                    from mlflow.entities.trace_location import (
+                        MlflowExperimentLocation,
+                    )
+
+                    trace_destination = MlflowExperimentLocation(experiment_id)
+                except Exception:
+                    trace_destination = None
+
             with mlflow.start_span(
-                name=f"sample.{sample_id or 'unknown'}", span_type=SPAN_TYPE_AGENT
+                name=f"sample.{sample_id or 'unknown'}",
+                span_type=SPAN_TYPE_AGENT,
+                trace_destination=trace_destination,
             ) as root_span:
                 trace_id = str(getattr(root_span, "trace_id", "") or "") or None
                 try:

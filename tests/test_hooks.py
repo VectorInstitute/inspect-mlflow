@@ -260,11 +260,13 @@ class TestMLflowHooks:
                 span_type: str,
                 *,
                 trace_id: str = "trace-1",
+                trace_destination: object | None = None,
             ) -> None:
                 self.owner = owner
                 self.name = name
                 self.span_type = span_type
                 self.trace_id = trace_id
+                self.trace_destination = trace_destination
                 self.attributes: dict[str, object] = {}
                 self.inputs: dict[str, object] = {}
                 self.outputs: dict[str, object] = {}
@@ -290,8 +292,18 @@ class TestMLflowHooks:
                 self.spans: list[FakeSpan] = []
                 self.trace_tags: dict[str, str] = {}
 
-            def start_span(self, name: str, span_type: str) -> FakeSpan:
-                return FakeSpan(self, name, span_type)
+            def start_span(
+                self,
+                name: str,
+                span_type: str,
+                trace_destination: object | None = None,
+            ) -> FakeSpan:
+                return FakeSpan(
+                    self,
+                    name,
+                    span_type,
+                    trace_destination=trace_destination,
+                )
 
             def update_current_trace(self, tags: dict[str, str]) -> None:
                 self.trace_tags.update(tags)
@@ -1032,6 +1044,7 @@ class TestMLflowHooksAsync:
         hooks._task_models["eval-1"].add("openai/gpt-4o-mini")
         hooks._task_raw_scores["eval-1"][("task-a", "score")]["1"] = 1
         hooks._task_usage_totals["eval-1"] = {"openai/gpt-4o-mini": {"input_tokens": 1}}
+        hooks._task_experiment_ids["eval-1"] = "exp-1"
         hooks._task_sample_rows["eval-1"].append({"sample_id": "s1"})
         hooks._task_message_rows["eval-1"].append({"message_index": 0})
         hooks._task_sample_score_rows["eval-1"].append({"scorer": "acc"})
@@ -1073,6 +1086,7 @@ class TestMLflowHooksAsync:
         assert "eval-1" not in hooks._task_models
         assert "eval-1" not in hooks._task_raw_scores
         assert "eval-1" not in hooks._task_usage_totals
+        assert "eval-1" not in hooks._task_experiment_ids
         assert "eval-1" not in hooks._task_sample_rows
         assert "eval-1" not in hooks._task_message_rows
         assert "eval-1" not in hooks._task_sample_score_rows

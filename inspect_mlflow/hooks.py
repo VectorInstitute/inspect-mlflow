@@ -71,6 +71,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
     _task_models: dict[str, set[str]]
     _task_raw_scores: dict[str, dict[tuple[str, str], Counter[str]]]
     _task_usage_totals: dict[str, dict[str, dict[str, int]]]
+    _task_experiment_ids: dict[str, str]
     _task_settings: dict[str, MLflowSettings]
     _task_sample_rows: dict[str, list[dict[str, Any]]]
     _task_message_rows: dict[str, list[dict[str, Any]]]
@@ -78,6 +79,8 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
     _task_rows_data: dict[str, list[dict[str, Any]]]
     _task_event_rows: dict[str, list[dict[str, Any]]]
     _task_usage_rows: dict[str, list[dict[str, Any]]]
+    _trace_log_warning_emitted: bool
+    _trace_link_warning_emitted: bool
 
     def __init__(self) -> None:
         self._settings: MLflowSettings | None = None
@@ -87,6 +90,8 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
         self._autolog_enabled: bool = False
         self._trace_supported: bool = True
         self._mlflow_client: Any | None = None
+        self._trace_log_warning_emitted = False
+        self._trace_link_warning_emitted = False
         initialize_tracking_state(self)
 
     @property
@@ -178,9 +183,12 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
                 task_names=self._all_task_names,
             )
             self._ensure_experiment(mlflow, self._experiment_name)
+            mlflow.set_experiment(self._experiment_name)
 
             # Mark that we're ready to log (runs will be started per-task)
             self._run_logging_enabled = True
+            self._trace_log_warning_emitted = False
+            self._trace_link_warning_emitted = False
 
             _LOG.info(
                 f"MLflow tracking initialized for experiment: {self._experiment_name}"
@@ -278,6 +286,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
                 )
                 run_id = run.info.run_id
                 self._active_runs[eval_id] = run_id
+                self._task_experiment_ids[eval_id] = experiment_id
                 self._task_settings[eval_id] = cfg
 
             # Tags: only things useful for filtering/grouping in the UI
@@ -390,18 +399,47 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
             # Log hierarchical trace - activate the specific run context
             if cfg.log_traces:
                 try:
+                    experiment_id = self._task_experiment_ids.get(eval_id)
                     trace_id = self._log_sample_trace(
-                        mlflow, task_name, eval_id, sample
+                        mlflow,
+                        task_name,
+                        eval_id,
+                        sample,
+                        experiment_id=experiment_id,
                     )
                     if trace_id:
                         try:
                             client.link_traces_to_run(
                                 trace_ids=[trace_id], run_id=run_id
                             )
-                        except Exception:
-                            _LOG.debug("Could not link trace to run", exc_info=True)
-                except Exception:
-                    _LOG.debug("Could not log trace", exc_info=True)
+                        except Exception as exc:
+                            if not self._trace_link_warning_emitted:
+                                _LOG.warning(
+                                    "MLflow trace linking is unavailable; traces may only "
+                                    "appear in the experiment Traces view: %s",
+                                    str(exc),
+                                )
+                                self._trace_link_warning_emitted = True
+                    elif not self._trace_log_warning_emitted:
+                        _LOG.warning(
+                            "MLflow trace logging produced no trace for sample %s "
+                            "(task=%s, eval_id=%s).",
+                            str(sample_id),
+                            str(task_name),
+                            str(eval_id),
+                        )
+                        self._trace_log_warning_emitted = True
+                except Exception as exc:
+                    if not self._trace_log_warning_emitted:
+                        _LOG.warning(
+                            "Could not log MLflow trace for sample %s "
+                            "(task=%s, eval_id=%s): %s",
+                            str(sample_id),
+                            str(task_name),
+                            str(eval_id),
+                            str(exc),
+                        )
+                        self._trace_log_warning_emitted = True
 
         except Exception:
             _LOG.exception("MLflow hook failed during sample end")

@@ -31,6 +31,7 @@ def initialize_tracking_state(hook: Any) -> None:
     hook._task_models = defaultdict(set)  # eval_id -> models
     hook._task_raw_scores = defaultdict(lambda: defaultdict(Counter))
     hook._task_usage_totals = defaultdict(lambda: defaultdict(dict))
+    hook._task_experiment_ids = {}
     hook._task_settings = cast(dict[str, MLflowSettings], {})
     hook._mlflow_client = None
 
@@ -66,6 +67,7 @@ def reset_run_state(hook: Any) -> None:
     hook._task_models.clear()
     hook._task_raw_scores.clear()
     hook._task_usage_totals.clear()
+    hook._task_experiment_ids.clear()
     hook._task_settings.clear()
     hook._task_sample_rows.clear()
     hook._task_message_rows.clear()
@@ -97,6 +99,7 @@ def clear_task_state(
     hook._task_models.pop(eval_id, None)
     hook._task_raw_scores.pop(eval_id, None)
     hook._task_usage_totals.pop(eval_id, None)
+    hook._task_experiment_ids.pop(eval_id, None)
     hook._task_sample_rows.pop(eval_id, None)
     hook._task_message_rows.pop(eval_id, None)
     hook._task_sample_score_rows.pop(eval_id, None)
