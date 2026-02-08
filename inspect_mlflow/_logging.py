@@ -357,6 +357,7 @@ class LoggingMixin:
         logged_paths: list[str] = []
         uploaded_local_paths: set[str] = set()
         search_dirs: list[Path] = []
+        has_explicit_local_log = False
 
         def add_search_dir(path: Path) -> None:
             """Add directory once, preserving order."""
@@ -379,6 +380,7 @@ class LoggingMixin:
 
                 local_path = _location_to_local_path(location_str)
                 if local_path and local_path.exists():
+                    has_explicit_local_log = True
                     add_search_dir(local_path.parent)
                     local_path_key = uploaded_key(local_path)
                     if local_path_key not in uploaded_local_paths:
@@ -419,7 +421,7 @@ class LoggingMixin:
                 search_ids.append(str(log_task_id))
 
         # Search known log directories for matching files.
-        if search_dirs and search_ids:
+        if search_dirs and search_ids and not has_explicit_local_log:
             for logs_dir in search_dirs:
                 found_match = False
                 for search_id in search_ids:
