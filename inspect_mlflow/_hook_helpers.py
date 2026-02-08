@@ -159,14 +159,47 @@ def get_sample_output_text(sample: Any) -> str | None:
     if output is None:
         return None
     for key in ("completion", "text"):
-        value = getattr(output, key, None)
+        try:
+            value = getattr(output, key, None)
+        except Exception:
+            value = None
         if value:
             return str(value)
-    message = getattr(output, "message", None)
-    if message:
-        content = getattr(message, "content", None)
-        if content:
-            return str(content)
+
+    # Some output objects expose .message as a property that raises when there
+    # are no choices (e.g., cancelled model generations).
+    message = None
+    try:
+        message = getattr(output, "message", None)
+    except Exception:
+        message = None
+
+    if message is not None:
+        for key in ("content", "text"):
+            value = _obj_get(message, key)
+            if value:
+                return str(value)
+
+    # Fallback for ModelOutput-like objects that carry choices directly.
+    choices = None
+    try:
+        choices = getattr(output, "choices", None)
+    except Exception:
+        choices = None
+
+    if isinstance(choices, list) and choices:
+        first_choice = choices[0]
+        choice_message = _obj_get(first_choice, "message")
+        if choice_message is not None:
+            for key in ("content", "text"):
+                value = _obj_get(choice_message, key)
+                if value:
+                    return str(value)
+        for key in ("text", "completion"):
+            value = _obj_get(first_choice, key)
+            if value:
+                return str(value)
+
     return _to_json(output)
 
 

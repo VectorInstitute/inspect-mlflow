@@ -320,17 +320,19 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
             accuracy = (
                 (correct_samples / scored_samples) if scored_samples > 0 else None
             )
+            accuracy_value = accuracy if accuracy is not None else 0.0
 
             # Log progress metrics using client API (works with parallel tasks)
             client.log_metric(run_id, f"{TAG_PREFIX}.samples", total_samples, step=step)
             client.log_metric(
                 run_id, f"{TAG_PREFIX}.samples_scored", scored_samples, step=step
             )
-            if accuracy is not None:
-                client.log_metric(run_id, f"{TAG_PREFIX}.accuracy", accuracy, step=step)
-                client.log_metric(
-                    run_id, f"{TAG_PREFIX}.samples_correct", correct_samples, step=step
-                )
+            client.log_metric(
+                run_id, f"{TAG_PREFIX}.accuracy", accuracy_value, step=step
+            )
+            client.log_metric(
+                run_id, f"{TAG_PREFIX}.samples_correct", correct_samples, step=step
+            )
 
             # Log sample scores
             task_name = self._task_names_by_eval_id.get(eval_id, eval_id)
@@ -434,14 +436,12 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
             accuracy = (
                 (correct_samples / scored_samples) if scored_samples > 0 else None
             )
+            accuracy_value = accuracy if accuracy is not None else 0.0
 
             client.log_metric(run_id, f"{TAG_PREFIX}.samples_total", total_samples)
             client.log_metric(run_id, f"{TAG_PREFIX}.samples_scored", scored_samples)
-            if accuracy is not None:
-                client.log_metric(
-                    run_id, f"{TAG_PREFIX}.samples_correct", correct_samples
-                )
-                client.log_metric(run_id, f"{TAG_PREFIX}.accuracy", accuracy)
+            client.log_metric(run_id, f"{TAG_PREFIX}.samples_correct", correct_samples)
+            client.log_metric(run_id, f"{TAG_PREFIX}.accuracy", accuracy_value)
             self._log_usage_metrics_client(client, run_id, eval_id)
 
             # Log artifacts for this task via client APIs (safe for parallel tasks)

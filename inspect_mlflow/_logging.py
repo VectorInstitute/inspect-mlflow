@@ -254,15 +254,63 @@ class LoggingMixin:
     ) -> None:
         """Record per-sample usage for the usage table (per eval_id)."""
         usage_map = _obj_get(sample, "model_usage")
-        if not isinstance(usage_map, dict):
+        use_event_fallback = not isinstance(usage_map, dict) or not usage_map
+
+        if not use_event_fallback:
+            for model_name, usage in usage_map.items():
+                model_key = str(model_name)
+                usage_dict = _usage_to_dict(usage)
+                if not usage_dict:
+                    continue
+
+                self._task_models[eval_id].add(model_key)
+                self._task_usage_rows[eval_id].append(
+                    {
+                        "task_name": task_name,
+                        "eval_id": eval_id,
+                        "sample_id": sample_id,
+                        "model": model_key,
+                        **usage_dict,
+                    }
+                )
+
+                # Aggregate totals for this task
+                totals = self._task_usage_totals[eval_id].setdefault(model_key, {})
+                for key, value in usage_dict.items():
+                    totals[key] = int(totals.get(key, 0)) + int(value)
             return
 
-        for model_name, usage in usage_map.items():
-            model_key = str(model_name)
-            usage_dict = _usage_to_dict(usage)
+        # Fallback: derive usage from model events when sample.model_usage is empty.
+        events = _obj_get(sample, "events")
+        if not isinstance(events, list):
+            return
+
+        event_usage_by_model: dict[str, dict[str, int]] = defaultdict(
+            lambda: defaultdict(int)
+        )
+
+        for event in events:
+            event_type = _obj_get(event, "event") or _obj_get(event, "type")
+            if event_type != "model":
+                continue
+            output = _obj_get(event, "output")
+            usage_dict = _usage_to_dict(_obj_get(output, "usage"))
             if not usage_dict:
                 continue
+            model_name = str(
+                _obj_get(event, "model") or _obj_get(output, "model") or ""
+            )
+            if not model_name:
+                model_name = "unknown"
+            model_totals = event_usage_by_model[model_name]
+            for key, value in usage_dict.items():
+                model_totals[key] += int(value)
 
+        if not event_usage_by_model:
+            return
+
+        for model_key, usage_dict in event_usage_by_model.items():
+            normalized_usage = {k: int(v) for k, v in usage_dict.items()}
             self._task_models[eval_id].add(model_key)
             self._task_usage_rows[eval_id].append(
                 {
@@ -270,13 +318,12 @@ class LoggingMixin:
                     "eval_id": eval_id,
                     "sample_id": sample_id,
                     "model": model_key,
-                    **usage_dict,
+                    **normalized_usage,
                 }
             )
 
-            # Aggregate totals for this task
             totals = self._task_usage_totals[eval_id].setdefault(model_key, {})
-            for key, value in usage_dict.items():
+            for key, value in normalized_usage.items():
                 totals[key] = int(totals.get(key, 0)) + int(value)
 
     def _record_sample_events(
