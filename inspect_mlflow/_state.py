@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from typing import Any
+from typing import Any, cast
 
 from .config import MLflowSettings
 
@@ -31,7 +31,8 @@ def initialize_tracking_state(hook: Any) -> None:
     hook._task_models = defaultdict(set)  # eval_id -> models
     hook._task_raw_scores = defaultdict(lambda: defaultdict(Counter))
     hook._task_usage_totals = defaultdict(lambda: defaultdict(dict))
-    hook._task_settings: dict[str, MLflowSettings] = {}
+    hook._task_settings = cast(dict[str, MLflowSettings], {})
+    hook._mlflow_client = None
 
     # Table rows for batch logging (per eval_id)
     hook._task_sample_rows = defaultdict(list)
@@ -51,6 +52,7 @@ def reset_run_state(hook: Any) -> None:
     hook._experiment_name = None
     hook._all_task_names = None
     hook._run_logging_enabled = False
+    hook._mlflow_client = None
 
     # Clear per-task state
     hook._task_sample_counts.clear()

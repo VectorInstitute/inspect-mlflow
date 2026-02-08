@@ -114,9 +114,10 @@ def task_scorer_names_from_spec(spec: Any) -> list[str]:
     return names
 
 
-def ensure_experiment(mlflow: Any, name: str) -> None:
+def ensure_experiment(mlflow: Any, name: str, client: Any | None = None) -> None:
     """Create or restore experiment by name using client APIs only."""
-    client = mlflow.tracking.MlflowClient()
+    if client is None:
+        client = mlflow.tracking.MlflowClient()
     existing = client.get_experiment_by_name(name)
 
     if existing is not None and getattr(existing, "lifecycle_stage", None) == "deleted":

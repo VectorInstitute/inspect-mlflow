@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Protocol
 
 from ._utils import (
     SPAN_TYPE_AGENT,
@@ -19,6 +19,55 @@ from ._utils import (
 _LOG = logging.getLogger(__name__)
 
 
+class _TracingHost(Protocol):
+    """Protocol describing hook attributes/methods used by TracingMixin."""
+
+    _trace_supported: bool
+
+    def _scores_to_dict(self, scores: Any) -> dict[str, Any]: ...
+
+    def _get_sample_output_text(self, sample: Any) -> str | None: ...
+
+    def _log_event_spans(
+        self,
+        mlflow: Any,
+        events: list[Any],
+        task_name: str,
+        eval_id: str,
+        sample_id: Any,
+    ) -> None: ...
+
+    def _log_model_event_span(
+        self,
+        mlflow: Any,
+        event: Any,
+        idx: int,
+        task_name: str,
+        eval_id: str,
+        sample_id: Any,
+    ) -> None: ...
+
+    def _log_tool_event_span(
+        self,
+        mlflow: Any,
+        event: Any,
+        idx: int,
+        task_name: str,
+        eval_id: str,
+        sample_id: Any,
+    ) -> None: ...
+
+    def _log_error_event_span(
+        self,
+        mlflow: Any,
+        event: Any,
+        idx: int,
+        task_name: str,
+        eval_id: str,
+        sample_id: Any,
+    ) -> None: ...
+
+
 class TracingMixin:
     """Mixin providing MLflow tracing methods for MLflowHooks.
 
@@ -29,7 +78,7 @@ class TracingMixin:
     """
 
     def _log_sample_trace(
-        self,
+        self: _TracingHost,
         mlflow: Any,
         task_name: str,
         eval_id: str,
@@ -91,7 +140,7 @@ class TracingMixin:
             return None
 
     def _log_event_spans(
-        self,
+        self: _TracingHost,
         mlflow: Any,
         events: list[Any],
         task_name: str,
@@ -116,7 +165,7 @@ class TracingMixin:
                 )
 
     def _log_model_event_span(
-        self,
+        self: _TracingHost,
         mlflow: Any,
         event: Any,
         idx: int,
@@ -151,7 +200,7 @@ class TracingMixin:
             )
 
     def _log_tool_event_span(
-        self,
+        self: _TracingHost,
         mlflow: Any,
         event: Any,
         idx: int,
@@ -188,7 +237,7 @@ class TracingMixin:
             )
 
     def _log_error_event_span(
-        self,
+        self: _TracingHost,
         mlflow: Any,
         event: Any,
         idx: int,

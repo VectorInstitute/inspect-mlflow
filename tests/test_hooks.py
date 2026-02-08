@@ -396,6 +396,90 @@ class TestMLflowHooksAsync:
         assert hooks._task_sample_counts == {}
 
     @pytest.mark.asyncio
+    async def test_reuses_single_mlflow_client_within_run(self, clean_env, monkeypatch):
+        """Hooks should reuse one MlflowClient per run to avoid connection churn."""
+        monkeypatch.setenv("INSPECT_MLFLOW_LOG_ARTIFACTS", "false")
+        monkeypatch.setenv("INSPECT_MLFLOW_LOG_TRACES", "false")
+        monkeypatch.setenv("INSPECT_MLFLOW_AUTOLOG_ENABLED", "false")
+
+        hooks = MLflowHooks()
+
+        client = MagicMock()
+        experiment = MagicMock()
+        experiment.experiment_id = "exp-1"
+        run = MagicMock()
+        run.info.run_id = "run-1"
+        client.get_experiment_by_name.return_value = experiment
+        client.create_run.return_value = run
+
+        mlflow = MagicMock()
+        mlflow.tracking.MlflowClient.return_value = client
+        hooks._mlflow = lambda: mlflow  # type: ignore[assignment]
+
+        run_start = MagicMock()
+        run_start.run_id = "inspect-run-1"
+        run_start.task_names = ["task-a"]
+        run_start.eval_set_id = None
+        await hooks.on_run_start(run_start)
+
+        spec = MagicMock()
+        spec.task = "task-a"
+        spec.name = "task-a"
+        spec.model = "openai/gpt-4o-mini"
+        spec.metadata = None
+        spec.model_dump.return_value = {
+            "task": "task-a",
+            "model": "openai/gpt-4o-mini",
+            "dataset": {"name": "test"},
+            "config": {},
+        }
+
+        task_start = MagicMock()
+        task_start.eval_id = "eval-1"
+        task_start.spec = spec
+        await hooks.on_task_start(task_start)
+
+        sample = MagicMock()
+        sample.id = "sample-1"
+        sample.input = "prompt"
+        sample.target = "target"
+        sample.output = ModelOutput.from_content(
+            model="openai/gpt-4o-mini", content="done"
+        )
+        sample.scores = None
+        sample.model_usage = {}
+        sample.events = []
+        sample.total_time = 0.0
+        sample.working_time = 0.0
+        sample.error = None
+
+        sample_end = MagicMock()
+        sample_end.eval_id = "eval-1"
+        sample_end.sample = sample
+        await hooks.on_sample_end(sample_end)
+
+        eval_info = MagicMock()
+        eval_info.task = "task-a"
+        eval_info.task_id = "task-a"
+        eval_info.model = "openai/gpt-4o-mini"
+
+        log = MagicMock()
+        log.status = "success"
+        log.eval = eval_info
+        log.scores = None
+        log.metrics = None
+        log.results = None
+        log.stats = None
+
+        task_end = MagicMock()
+        task_end.eval_id = "eval-1"
+        task_end.log = log
+        task_end.spec = None
+        await hooks.on_task_end(task_end)
+
+        assert mlflow.tracking.MlflowClient.call_count == 1
+
+    @pytest.mark.asyncio
     async def test_on_sample_end_handles_empty_model_output_choices(
         self, clean_env, monkeypatch
     ):

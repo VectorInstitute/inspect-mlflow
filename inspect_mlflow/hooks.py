@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import logging
 import threading
+from collections import Counter
 from typing import Any
 
 from inspect_ai.hooks import (
@@ -47,6 +48,36 @@ _LOG = logging.getLogger(__name__)
 class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
     """MLflow integration hooks for Inspect."""
 
+    _settings: MLflowSettings | None
+    _lock: threading.Lock
+    _inspect_run_id: str | None
+    _run_logging_enabled: bool
+    _autolog_enabled: bool
+    _trace_supported: bool
+    _mlflow_client: Any | None
+    _eval_set_id: str | None
+    _eval_set_log_dir: str | None
+    _eval_set_run_count: int
+    _experiment_name: str | None
+    _all_task_names: list[str] | None
+    _active_runs: dict[str, str]
+    _task_names_by_eval_id: dict[str, str]
+    _task_sample_counts: dict[str, int]
+    _task_scored_counts: dict[str, int]
+    _task_correct_counts: dict[str, int]
+    _task_sample_steps: dict[str, int]
+    _task_disabled_eval_ids: set[str]
+    _task_scorer_names_by_eval_id: dict[str, list[str]]
+    _task_models: dict[str, set[str]]
+    _task_raw_scores: dict[str, dict[tuple[str, str], Counter[str]]]
+    _task_usage_totals: dict[str, dict[str, dict[str, int]]]
+    _task_settings: dict[str, MLflowSettings]
+    _task_sample_rows: dict[str, list[dict[str, Any]]]
+    _task_sample_score_rows: dict[str, list[dict[str, Any]]]
+    _task_rows_data: dict[str, list[dict[str, Any]]]
+    _task_event_rows: dict[str, list[dict[str, Any]]]
+    _task_usage_rows: dict[str, list[dict[str, Any]]]
+
     def __init__(self) -> None:
         self._settings: MLflowSettings | None = None
         self._lock = threading.Lock()
@@ -54,6 +85,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
         self._run_logging_enabled: bool = False
         self._autolog_enabled: bool = False
         self._trace_supported: bool = True
+        self._mlflow_client: Any | None = None
         initialize_tracking_state(self)
 
     @property
@@ -117,6 +149,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
             # Configure tracking URI
             if cfg.tracking_uri:
                 mlflow.set_tracking_uri(cfg.tracking_uri)
+            self._mlflow_client = None
 
             # Enable async logging (graceful fallback for older MLflow versions)
             try:
@@ -210,7 +243,9 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
                     )
                     parts.append(short_model)
                 parts.append(eval_id)
-                run_name = "-".join(parts) if parts else self._inspect_run_id
+                run_name = (
+                    "-".join(parts) if parts else (self._inspect_run_id or eval_id)
+                )
 
             # Initialize per-task state
             self._task_sample_counts[eval_id] = 0
@@ -230,7 +265,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
                 )
             self._ensure_experiment(mlflow, experiment_name)
 
-            client = mlflow.tracking.MlflowClient()
+            client = self._client(mlflow)
             experiment = client.get_experiment_by_name(experiment_name)
             experiment_id = experiment.experiment_id if experiment else "0"
 
@@ -280,7 +315,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
         try:
             mlflow = self._mlflow()
             cfg = self._task_settings.get(eval_id, self.settings)
-            client = mlflow.tracking.MlflowClient()
+            client = self._client(mlflow)
 
             sample = getattr(data, "sample", None)
             scores = getattr(sample, "scores", None) if sample is not None else None
@@ -389,7 +424,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
         try:
             mlflow = self._mlflow()
             cfg = self._task_settings.get(eval_id, self.settings)
-            client = mlflow.tracking.MlflowClient()
+            client = self._client(mlflow)
 
             log = getattr(data, "log", None)
             task_name = self._get_task_name(data, log) or eval_id
@@ -484,7 +519,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
 
         try:
             mlflow = self._mlflow()
-            client = mlflow.tracking.MlflowClient()
+            client = self._client(mlflow)
 
             # End any orphaned runs (shouldn't happen normally)
             for eval_id, run_id in list(self._active_runs.items()):
@@ -544,6 +579,12 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
         import mlflow
 
         return mlflow
+
+    def _client(self, mlflow: Any) -> Any:
+        """Return a cached MlflowClient for the active run context."""
+        if self._mlflow_client is None:
+            self._mlflow_client = mlflow.tracking.MlflowClient()
+        return self._mlflow_client
 
     def _is_correct(self, sample: Any) -> bool:
         """Check if a sample is correct based on scores."""
@@ -608,7 +649,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
 
     def _ensure_experiment(self, mlflow: Any, name: str) -> None:
         """Create or get experiment by name."""
-        ensure_experiment(mlflow, name)
+        ensure_experiment(mlflow, name, client=self._client(mlflow))
 
     def _default_experiment_name(
         self, run_id: str | None, task_names: list[str] | None

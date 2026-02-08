@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from ._utils import (
     TAG_PREFIX,
@@ -21,6 +21,30 @@ from ._utils import (
 )
 
 _LOG = logging.getLogger(__name__)
+
+
+class _LoggingHost(Protocol):
+    """Protocol describing hook attributes/methods used by LoggingMixin."""
+
+    _SPEC_SKIP_FIELDS: set[str]
+    _task_raw_scores: dict[str, dict[tuple[str, str], Counter[str]]]
+    _task_sample_score_rows: dict[str, list[dict[str, Any]]]
+    _task_sample_rows: dict[str, list[dict[str, Any]]]
+    _task_rows_data: dict[str, list[dict[str, Any]]]
+    _task_event_rows: dict[str, list[dict[str, Any]]]
+    _task_usage_rows: dict[str, list[dict[str, Any]]]
+    _task_models: dict[str, set[str]]
+    _task_usage_totals: dict[str, dict[str, dict[str, int]]]
+
+    def _get_sample_output_text(self, sample: Any) -> str | None: ...
+
+    def _scores_to_dict(self, scores: Any) -> dict[str, Any]: ...
+
+    @staticmethod
+    def _rows_to_columns(rows: list[dict[str, Any]]) -> dict[str, list[Any]]: ...
+
+    @staticmethod
+    def _log_param_safe(client: Any, run_id: str, key: str, value: str) -> None: ...
 
 
 class LoggingMixin:
@@ -56,7 +80,7 @@ class LoggingMixin:
     }
 
     def _log_task_params_client(
-        self, client: Any, run_id: str, spec: Any, eval_id: str | None
+        self: _LoggingHost, client: Any, run_id: str, spec: Any, eval_id: str | None
     ) -> None:
         """Log task specification as MLflow parameters using client API.
 
@@ -105,7 +129,7 @@ class LoggingMixin:
                 pass
 
     def _log_sample_scores_client(
-        self,
+        self: _LoggingHost,
         client: Any,
         run_id: str,
         eval_id: str,
@@ -138,7 +162,7 @@ class LoggingMixin:
                 client.log_metric(run_id, metric_name, metric_value, step=step)
 
     def _log_task_scores_client(
-        self, client: Any, run_id: str, log: Any, task_name: str
+        self: _LoggingHost, client: Any, run_id: str, log: Any, task_name: str
     ) -> None:
         """Log task-level aggregate scores using client API."""
         results = _obj_get(log, "results")
@@ -158,7 +182,7 @@ class LoggingMixin:
                             client.log_metric(run_id, key, metric_value)
 
     def _set_usage_totals_for_task(
-        self, eval_id: str, stats_usage: dict[str, Any]
+        self: _LoggingHost, eval_id: str, stats_usage: dict[str, Any]
     ) -> None:
         """Set usage totals from task stats for a specific eval_id.
 
@@ -180,7 +204,9 @@ class LoggingMixin:
         if totals_for_eval:
             self._task_usage_totals[eval_id] = totals_for_eval
 
-    def _log_usage_metrics_client(self, client: Any, run_id: str, eval_id: str) -> None:
+    def _log_usage_metrics_client(
+        self: _LoggingHost, client: Any, run_id: str, eval_id: str
+    ) -> None:
         """Log aggregated token usage metrics using client API."""
         usage_totals = self._task_usage_totals.get(eval_id, {})
         if not usage_totals:
@@ -203,7 +229,7 @@ class LoggingMixin:
     # Table Recording
     # -------------------------------------------------------------------------
 
-    def _record_task_row(self, eval_id: str, spec: Any) -> None:
+    def _record_task_row(self: _LoggingHost, eval_id: str, spec: Any) -> None:
         """Record task info for the tasks table (per eval_id)."""
         self._task_rows_data[eval_id].append(
             {
@@ -224,7 +250,7 @@ class LoggingMixin:
         )
 
     def _record_sample_row(
-        self, eval_id: str, task_name: str, sample: Any, scores: Any
+        self: _LoggingHost, eval_id: str, task_name: str, sample: Any, scores: Any
     ) -> None:
         """Record sample info for the samples table (per eval_id)."""
         sample_id = _obj_get(sample, "id")
@@ -250,7 +276,7 @@ class LoggingMixin:
         )
 
     def _record_sample_usage(
-        self, eval_id: str, task_name: str, sample_id: Any, sample: Any
+        self: _LoggingHost, eval_id: str, task_name: str, sample_id: Any, sample: Any
     ) -> None:
         """Record per-sample usage for the usage table (per eval_id)."""
         usage_map = _obj_get(sample, "model_usage")
@@ -327,7 +353,7 @@ class LoggingMixin:
                 totals[key] = int(totals.get(key, 0)) + int(value)
 
     def _record_sample_events(
-        self, eval_id: str, task_name: str, sample_id: Any, sample: Any
+        self: _LoggingHost, eval_id: str, task_name: str, sample_id: Any, sample: Any
     ) -> None:
         """Record events for the events table."""
         events = _obj_get(sample, "events")
@@ -370,7 +396,9 @@ class LoggingMixin:
     # Artifact Logging
     # -------------------------------------------------------------------------
 
-    def _log_tables_for_task(self, client: Any, run_id: str, eval_id: str) -> None:
+    def _log_tables_for_task(
+        self: _LoggingHost, client: Any, run_id: str, eval_id: str
+    ) -> None:
         """Log all accumulated tables for a specific task as artifacts."""
         tables = [
             ("samples", self._task_sample_rows.get(eval_id, [])),
@@ -393,7 +421,7 @@ class LoggingMixin:
                 _LOG.debug(f"Failed to log {name} table", exc_info=True)
 
     def _log_task_inspect_logs(
-        self,
+        self: _LoggingHost,
         client: Any,
         run_id: str,
         log: Any,
