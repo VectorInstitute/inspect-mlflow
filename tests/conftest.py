@@ -42,26 +42,3 @@ def sample_task_spec():
     spec.task_version = 1
     spec.task_id = "task-123"
     return spec
-
-
-@pytest.fixture
-def sample_eval_sample():
-    """Create a mock EvalSample."""
-    sample = MagicMock()
-    sample.id = "sample-1"
-    sample.input = "What is 2+2?"
-    sample.target = "4"
-    sample.output = MagicMock(completion="The answer is 4")
-    sample.scores = {"accuracy": MagicMock(value="C", name="accuracy")}
-    sample.events = []
-    sample.model_usage = {
-        "openai/gpt-4": MagicMock(
-            input_tokens=100,
-            output_tokens=50,
-            total_tokens=150,
-        )
-    }
-    sample.total_time = 1.5
-    sample.working_time = 1.0
-    sample.error = None
-    return sample

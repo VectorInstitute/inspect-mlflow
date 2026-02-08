@@ -26,7 +26,6 @@ from ._hook_helpers import (
     ensure_experiment,
     get_sample_output_text,
     get_task_name,
-    is_correct,
     is_selected_score_correct,
     rows_to_columns,
     scores_to_dict,
@@ -53,7 +52,6 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
     _inspect_run_id: str | None
     _run_logging_enabled: bool
     _autolog_enabled: bool
-    _trace_supported: bool
     _mlflow_client: Any | None
     _eval_set_id: str | None
     _eval_set_log_dir: str | None
@@ -88,7 +86,6 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
         self._inspect_run_id: str | None = None
         self._run_logging_enabled: bool = False
         self._autolog_enabled: bool = False
-        self._trace_supported: bool = True
         self._mlflow_client: Any | None = None
         self._trace_log_warning_emitted = False
         self._trace_link_warning_emitted = False
@@ -626,10 +623,6 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
         if self._mlflow_client is None:
             self._mlflow_client = mlflow.tracking.MlflowClient()
         return self._mlflow_client
-
-    def _is_correct(self, sample: Any) -> bool:
-        """Check if a sample is correct based on scores."""
-        return is_correct(sample)
 
     def _sample_correctness(
         self,

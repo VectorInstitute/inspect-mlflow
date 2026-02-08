@@ -173,35 +173,6 @@ class TestMLflowHooks:
         hooks = MLflowHooks()
         assert hooks.enabled() is False
 
-    def test_is_correct(self, clean_env, sample_eval_sample):
-        """Test _is_correct method."""
-        hooks = MLflowHooks()
-
-        # Correct sample
-        sample_eval_sample.scores = {"acc": MagicMock(value=CORRECT)}
-        assert hooks._is_correct(sample_eval_sample) is True
-
-        sample_eval_sample.scores = {"acc": MagicMock(value=True)}
-        assert hooks._is_correct(sample_eval_sample) is True
-
-        sample_eval_sample.scores = {"acc": MagicMock(value=1)}
-        assert hooks._is_correct(sample_eval_sample) is True
-
-        sample_eval_sample.scores = {"acc": MagicMock(value=1.0)}
-        assert hooks._is_correct(sample_eval_sample) is True
-
-        # Partial scores should not count as correct.
-        sample_eval_sample.scores = {"acc": MagicMock(value=PARTIAL)}
-        assert hooks._is_correct(sample_eval_sample) is False
-
-        # Incorrect sample
-        sample_eval_sample.scores = {"acc": MagicMock(value=INCORRECT)}
-        assert hooks._is_correct(sample_eval_sample) is False
-
-        # No scores
-        sample_eval_sample.scores = None
-        assert hooks._is_correct(sample_eval_sample) is False
-
     def test_per_task_counters(self, clean_env):
         """Test per-task sample counters."""
         hooks = MLflowHooks()

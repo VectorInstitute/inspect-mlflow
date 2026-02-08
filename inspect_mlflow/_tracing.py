@@ -27,8 +27,6 @@ TRACE_MAX_TEXT_CHARS = 4000
 class _TracingHost(Protocol):
     """Protocol describing hook attributes/methods used by TracingMixin."""
 
-    _trace_supported: bool
-
     def _scores_to_dict(self, scores: Any) -> dict[str, Any]: ...
 
     def _get_sample_output_text(self, sample: Any) -> str | None: ...
@@ -86,7 +84,6 @@ class TracingMixin:
     """Mixin providing MLflow tracing methods for MLflowHooks.
 
     Expects the host class to provide:
-    - self._trace_supported: bool
     - self._scores_to_dict(scores) -> dict
     - self._get_sample_output_text(sample) -> str | None
     """
@@ -113,9 +110,6 @@ class TracingMixin:
 
         Returns the generated trace_id when available.
         """
-        if not self._trace_supported:
-            return None
-
         sample_id = _obj_get(sample, "id")
         sample_input = _obj_get(sample, "input")
         sample_output = self._get_sample_output_text(sample)

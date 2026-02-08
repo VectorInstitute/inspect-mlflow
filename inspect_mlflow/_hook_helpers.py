@@ -17,21 +17,6 @@ from ._utils import (
 )
 
 
-def is_correct(sample: Any) -> bool:
-    """Check if a sample is correct based on scores."""
-    scores = getattr(sample, "scores", None)
-    if not scores:
-        return False
-    for _, score in _iter_scores(scores):
-        value = getattr(score, "value", score)
-        if value == CORRECT or value is True:
-            return True
-        metric_value = _coerce_metric(value)
-        if metric_value == 1.0:
-            return True
-    return False
-
-
 def select_accuracy_score(
     sample: Any,
     *,
