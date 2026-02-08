@@ -26,6 +26,7 @@ def initialize_tracking_state(hook: Any) -> None:
     hook._task_scored_counts = {}  # eval_id -> accuracy-denominator sample count
     hook._task_correct_counts = {}  # eval_id -> correct count
     hook._task_sample_steps = {}  # eval_id -> step counter
+    hook._task_disabled_eval_ids = set()  # eval_id values disabled via task metadata
     hook._task_scorer_names_by_eval_id = {}  # eval_id -> scorer names from task spec
     hook._task_models = defaultdict(set)  # eval_id -> models
     hook._task_raw_scores = defaultdict(lambda: defaultdict(Counter))
@@ -56,6 +57,7 @@ def reset_run_state(hook: Any) -> None:
     hook._task_scored_counts.clear()
     hook._task_correct_counts.clear()
     hook._task_sample_steps.clear()
+    hook._task_disabled_eval_ids.clear()
     hook._task_names_by_eval_id.clear()
     hook._task_scorer_names_by_eval_id.clear()
     hook._task_models.clear()
@@ -86,6 +88,7 @@ def clear_task_state(
     hook._task_scored_counts.pop(eval_id, None)
     hook._task_correct_counts.pop(eval_id, None)
     hook._task_sample_steps.pop(eval_id, None)
+    hook._task_disabled_eval_ids.discard(eval_id)
     hook._task_scorer_names_by_eval_id.pop(eval_id, None)
     hook._task_models.pop(eval_id, None)
     hook._task_raw_scores.pop(eval_id, None)

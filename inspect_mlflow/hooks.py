@@ -169,6 +169,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
 
         try:
             eval_id = str(getattr(data, "eval_id", None) or "unknown")
+            self._task_disabled_eval_ids.discard(eval_id)
             task_settings = self.settings
 
             # Check for task metadata overrides
@@ -178,6 +179,7 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
                 if metadata:
                     task_settings = MLflowSettings.from_metadata(metadata)
                     if not task_settings.enabled:
+                        self._task_disabled_eval_ids.add(eval_id)
                         _LOG.info("MLflow disabled via task metadata")
                         return
 
@@ -376,6 +378,9 @@ class MLflowHooks(Hooks, TracingMixin, LoggingMixin):
         eval_id = str(getattr(data, "eval_id", "eval"))
         run_id = self._active_runs.get(eval_id)
         if not run_id:
+            if eval_id in self._task_disabled_eval_ids:
+                self._task_disabled_eval_ids.discard(eval_id)
+                return
             _LOG.warning(f"No active run found for eval_id={eval_id}")
             return
 
