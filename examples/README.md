@@ -39,6 +39,7 @@ Then run any of the included evals:
 
 ```bash
 uv run inspect eval examples/hello_world.py --model openai/gpt-4o-mini
+uv run inspect eval examples/hello_world_multi_samples.py --model openai/gpt-4o-mini
 uv run inspect eval examples/parallel_add.py --model openai/gpt-4o-mini
 uv run inspect eval examples/surfer.py --model openai/gpt-4o-mini
 ```
