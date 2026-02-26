@@ -12,13 +12,13 @@ At runtime, the extension consumes Inspect hook events and writes run data to ML
 
 ## Install
 
-```bash
+```sh
 pip install inspect-mlflow
 ```
 
 For local development:
 
-```bash
+```sh
 uv venv
 uv pip install -e '.[dev]'
 ```
@@ -29,16 +29,18 @@ uv pip install -e '.[dev]'
 
 You can use an existing remote server (self-hosted or managed) or run one locally.
 For local development, run this SQLite-based server:
-```bash
+
+```sh
 mlflow ui --backend-store-uri sqlite:///mlflow.db --host 127.0.0.1 --port 5000
 ```
+
 If your MLflow server requires authentication, configure access in your environment before running Inspect.
 
 2. Set the tracking URI.
 
 For the local server example above, this will be:
 
-```bash
+```sh
 export INSPECT_MLFLOW_TRACKING_URI=http://127.0.0.1:5000
 ```
 
@@ -46,7 +48,7 @@ For a remote server, set it to your server URL.
 
 3. Ensure `inspect-mlflow` is installed in the same environment where you run Inspect (see [Install](#install)), then run an eval:
 
-```bash
+```sh
 inspect eval path/to/task.py
 ```
 
@@ -56,7 +58,7 @@ Other environment variables are documented in [Configuration](#configuration).
 When `inspect-mlflow` is installed in the Inspect runtime environment, MLflow logging is enabled by default (`INSPECT_MLFLOW_ENABLED=true`) and runs are logged automatically.
 If you need to disable logging, set:
 
-```bash
+```sh
 export INSPECT_MLFLOW_ENABLED=false
 ```
 
@@ -87,7 +89,7 @@ You can change storage locations by configuring MLflow server options such as `-
 
 Example eval-set run:
 
-```bash
+```sh
 inspect eval-set examples/two_tasks.py \
   --id smoke-eval-set \
   --model openai/gpt-4o-mini \
@@ -110,27 +112,27 @@ The sections below group configuration into:
 
 ### Core
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `INSPECT_MLFLOW_ENABLED` | `true` | Enable/disable MLflow logging |
-| `INSPECT_MLFLOW_TRACKING_URI` | - | MLflow tracking server URI |
-| `INSPECT_MLFLOW_EXPERIMENT` | auto | Experiment name (auto-generated if unset) |
-| `INSPECT_MLFLOW_RUN_NAME` | auto | Run name (`<task>-<model>-<eval_id>` unless overridden) |
-| `INSPECT_MLFLOW_ACCURACY_SCORER` | auto | Scorer name used for `inspect.accuracy`/`inspect.samples_correct` (defaults to first task scorer when available) |
+| Variable                         | Default | Description                                                                                                      |
+| -------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------- |
+| `INSPECT_MLFLOW_ENABLED`         | `true`  | Enable/disable MLflow logging                                                                                    |
+| `INSPECT_MLFLOW_TRACKING_URI`    | -       | MLflow tracking server URI                                                                                       |
+| `INSPECT_MLFLOW_EXPERIMENT`      | auto    | Experiment name (auto-generated if unset)                                                                        |
+| `INSPECT_MLFLOW_RUN_NAME`        | auto    | Run name (`<task>-<model>-<eval_id>` unless overridden)                                                          |
+| `INSPECT_MLFLOW_ACCURACY_SCORER` | auto    | Scorer name used for `inspect.accuracy`/`inspect.samples_correct` (defaults to first task scorer when available) |
 
 ### Logging
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `INSPECT_MLFLOW_LOG_ARTIFACTS` | `true` | Log artifacts (tables + Inspect logs) |
-| `INSPECT_MLFLOW_LOG_TRACES` | `true` | Enable sample/event trace logging |
+| Variable                       | Default | Description                           |
+| ------------------------------ | ------- | ------------------------------------- |
+| `INSPECT_MLFLOW_LOG_ARTIFACTS` | `true`  | Log artifacts (tables + Inspect logs) |
+| `INSPECT_MLFLOW_LOG_TRACES`    | `true`  | Enable sample/event trace logging     |
 
 ### Autolog
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `INSPECT_MLFLOW_AUTOLOG_ENABLED` | `true` | Enable MLflow autolog for LLM libraries |
-| `INSPECT_MLFLOW_AUTOLOG_MODELS` | `openai,anthropic,langchain,litellm` | CSV or JSON array of libraries to autolog |
+| Variable                         | Default                              | Description                               |
+| -------------------------------- | ------------------------------------ | ----------------------------------------- |
+| `INSPECT_MLFLOW_AUTOLOG_ENABLED` | `true`                               | Enable MLflow autolog for LLM libraries   |
+| `INSPECT_MLFLOW_AUTOLOG_MODELS`  | `openai,anthropic,langchain,litellm` | CSV or JSON array of libraries to autolog |
 
 Autolog entries are enabled only when both MLflow flavor support and provider dependencies are available.
 
