@@ -77,7 +77,6 @@ class LoggingMixin:
         "eval_id",  # identifiers logged elsewhere / separately
         "packages",
         "revision",
-        "metadata",  # noisy / large
         "model_config",  # pydantic internal
     }
 
