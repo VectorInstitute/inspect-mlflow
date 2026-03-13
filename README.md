@@ -169,7 +169,7 @@ If you need different tracking URIs or autolog settings, run those tasks in sepa
 3. Otherwise, if a sample has exactly one score, that score is used.
 
 If no scorer can be selected for a sample, it is excluded from accuracy denominator (`inspect.samples_scored`).
-If a task has zero scored samples, `inspect.accuracy` and `inspect.samples_correct` are not emitted.
+If a task has zero scored samples, `inspect.accuracy` and `inspect.samples_correct` are emitted as `0.0`, and `inspect.samples_scored` remains `0`.
 
 ## What Gets Logged
 

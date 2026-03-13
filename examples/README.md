@@ -84,7 +84,7 @@ After running an example, check MLflow UI (`http://127.0.0.1:5000`):
 
 Note: to inspect run artifacts, switch the experiment type dropdown to `Machine learning` (not `GenAI apps & agents`), then open a run details page. The GenAI view focuses on traces and may not show the `Artifacts` panel.
 
-1. Confirm new runs appear under the `inspect-mlflow` experiment.
+1. Confirm new runs appear under your configured experiment (`INSPECT_MLFLOW_EXPERIMENT`), or under the auto-generated experiment name when it is unset.
 2. Confirm key tags exist on runs: `inspect.task`, `inspect.model`, `inspect.status`.
 3. Confirm summary metrics exist on each run (for example `inspect.samples_total`, `inspect.accuracy`).
 4. Confirm artifacts exist under `inspect/` (for example `samples.json`, `tasks.json`, `events.json` when artifact logging is enabled).
