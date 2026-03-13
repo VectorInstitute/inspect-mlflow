@@ -55,7 +55,7 @@ class MLflowSettings(BaseSettings):
     )
     run_name: str | None = Field(
         default=None,
-        description="MLflow run name. Uses Inspect run_id if not set.",
+        description="MLflow run name. Defaults to '<task>-<model>-<eval_id>' when unset.",
     )
     accuracy_scorer: str | None = Field(
         default=None,

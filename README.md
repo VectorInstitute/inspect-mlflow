@@ -115,7 +115,7 @@ The sections below group configuration into:
 | `INSPECT_MLFLOW_ENABLED` | `true` | Enable/disable MLflow logging |
 | `INSPECT_MLFLOW_TRACKING_URI` | - | MLflow tracking server URI |
 | `INSPECT_MLFLOW_EXPERIMENT` | auto | Experiment name (auto-generated if unset) |
-| `INSPECT_MLFLOW_RUN_NAME` | auto | Run name (`<task>-<model>-<eval_id>` unless overridden) |
+| `INSPECT_MLFLOW_RUN_NAME` | auto | Run name (`<task>-<short-model>-<eval_id>` unless overridden) |
 | `INSPECT_MLFLOW_ACCURACY_SCORER` | auto | Scorer name used for `inspect.accuracy`/`inspect.samples_correct` (defaults to first task scorer when available) |
 
 ### Logging
