@@ -1,6 +1,6 @@
 # Inspect MLflow Extension
 
-`inspect-mlflow` logs [Inspect](https://inspect.aisi.org.uk/) evaluation runs into [MLflow](https://mlflow.org/).
+This repository provides an extension that logs [Inspect](https://inspect.aisi.org.uk/) evaluation runs into [MLflow](https://mlflow.org/).
 
 The intent is:
 
