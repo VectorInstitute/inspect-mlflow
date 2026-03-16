@@ -75,17 +75,22 @@ Note: in MLflow 3.x, to inspect run artifacts, switch experiment type to `Machin
 ## Where Data Is Stored
 
 `inspect-mlflow` sends run data to the MLflow server at `INSPECT_MLFLOW_TRACKING_URI`.
-The MLflow server decides where data is stored.
+The MLflow server then persists that data using MLflow's standard storage model:
+a backend store for metadata and an artifact store for files.
 
 - Run metadata (params, metrics, tags, run state) is stored in the server backend store.
 - Artifacts are stored in the server artifact store.
 
-For the Quick Start local server command above (`mlflow ui --backend-store-uri sqlite:///mlflow.db ...`):
+For the Quick Start local command above (`mlflow ui --backend-store-uri sqlite:///mlflow.db ...`), this means:
 
 - Backend store is `sqlite:///mlflow.db` (saved in `mlflow.db`).
 - Artifacts are served from the default local artifact location (typically `./mlartifacts`).
 
 You can change storage locations by configuring MLflow server options such as `--backend-store-uri`, `--artifacts-destination`, and `--default-artifact-root`.
+For details, see MLflow docs on
+[Tracking Server architecture](https://mlflow.org/docs/latest/self-hosting/architecture/tracking-server/),
+[Backend Store](https://mlflow.org/docs/latest/self-hosting/architecture/backend-store/),
+and [Artifact Store](https://mlflow.org/docs/latest/self-hosting/architecture/artifact-store/).
 
 ## Run Mapping
 
