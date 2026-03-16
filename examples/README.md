@@ -2,6 +2,7 @@
 
 These examples are integration smoke tests to verify that `inspect-mlflow` correctly logs Inspect runs (runs, tags, metrics, artifacts, and traces) to MLflow.
 They are not intended to benchmark model quality or debug task logic.
+Before running examples, complete project installation from the main README: [Install](../README.md#install).
 Below are the steps to run them locally.
 
 ## Setup server

@@ -16,15 +16,13 @@ At runtime, the extension consumes Inspect hook events and writes run data to ML
 Install it from this repository:
 
 ```bash
-uv venv
-uv pip install -e .
+uv sync
 ```
 
 For local development:
 
 ```bash
-uv venv
-uv pip install -e '.[dev]'
+uv sync --extra dev
 ```
 
 ## Quick Start
