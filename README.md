@@ -12,8 +12,12 @@ At runtime, the extension consumes Inspect hook events and writes run data to ML
 
 ## Install
 
+`inspect-mlflow` is not currently published on PyPI.
+Install it from this repository:
+
 ```bash
-pip install inspect-mlflow
+uv venv
+uv pip install -e .
 ```
 
 For local development:
