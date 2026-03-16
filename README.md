@@ -38,7 +38,6 @@ MLflow docs: https://mlflow.org/docs/latest/self-hosting/architecture/tracking-s
 
 For quick local validation of this repo, run this SQLite-based server:
 ```bash
-mlflow ui --backend-store-uri sqlite:///mlflow.db --host 127.0.0.1 --port 5000
 uv run mlflow ui --backend-store-uri sqlite:///mlflow.db --host 127.0.0.1 --port 5000
 ```
 If your MLflow server requires authentication, configure access in your environment before running Inspect.
