@@ -31,8 +31,12 @@ uv pip install -e '.[dev]'
 
 1. Set up an MLflow tracking server.
 
-You can use an existing remote server (self-hosted or managed) or run one locally.
-For local development, run this SQLite-based server:
+This is standard MLflow setup: you can use either
+an existing remote server (self-hosted or managed) or run one locally.
+
+MLflow docs: https://mlflow.org/docs/latest/self-hosting/architecture/tracking-server/
+
+For quick local validation of this repo, run this SQLite-based server:
 ```bash
 mlflow ui --backend-store-uri sqlite:///mlflow.db --host 127.0.0.1 --port 5000
 ```
