@@ -1,6 +1,7 @@
 # Examples
 
-These examples are for quickly validating that `inspect-mlflow` logs Inspect runs correctly into MLflow.
+These examples are integration smoke tests to verify that `inspect-mlflow` correctly logs Inspect runs (runs, tags, metrics, artifacts, and traces) to MLflow.
+They are not intended to benchmark model quality or debug task logic.
 Below are the steps to run them locally.
 
 ## Setup server
