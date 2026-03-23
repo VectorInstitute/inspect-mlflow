@@ -232,3 +232,7 @@ When `INSPECT_MLFLOW_LOG_TRACES=true`:
 Example workflows are in `examples/README.md`.
 
 Examples are integration smoke tests for this extension and are based on Inspect examples, not a separate benchmark suite.
+
+## Acknowledgement 
+
+This project was conducted by the Vector Institute and the National Research Council of Canada, on behalf of the Canadian AI Safety Institute.
