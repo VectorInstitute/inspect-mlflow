@@ -12,14 +12,19 @@ At runtime, the extension consumes Inspect hook events and writes run data to ML
 
 ## Install
 
-`inspect-mlflow` is not currently published on PyPI.
-Install it from this repository:
+From PyPI:
+
+```bash
+pip install inspect-mlflow-ext
+```
+
+If you are working in this repository, install local dependencies with:
 
 ```bash
 uv sync
 ```
 
-For local development:
+For local development tools:
 
 ```bash
 uv sync --extra dev
@@ -36,7 +41,7 @@ MLflow docs: https://mlflow.org/docs/latest/self-hosting/architecture/tracking-s
 
 For quick local validation of this repo, run this SQLite-based server:
 ```bash
-uv run mlflow ui --backend-store-uri sqlite:///mlflow.db --host 127.0.0.1 --port 5000
+mlflow ui --backend-store-uri sqlite:///mlflow.db --host 127.0.0.1 --port 5000
 ```
 If your MLflow server requires authentication, configure access in your environment before running Inspect.
 
@@ -50,7 +55,7 @@ export INSPECT_MLFLOW_TRACKING_URI=http://127.0.0.1:5000
 
 For a remote server, set it to your server URL.
 
-3. Ensure `inspect-mlflow` is installed in the same environment where you run Inspect (see [Install](#install)), then run an eval:
+3. Ensure `inspect-mlflow-ext` is installed in the same environment where you run Inspect (see [Install](#install)), then run an eval:
 
 ```bash
 inspect eval path/to/task.py
@@ -59,7 +64,7 @@ inspect eval path/to/task.py
 For local testing / runnable quick-start commands, see [examples/README.md](examples/README.md).
 Other environment variables are documented in [Configuration](#configuration).
 
-When `inspect-mlflow` is installed in the Inspect runtime environment, MLflow logging is enabled by default (`INSPECT_MLFLOW_ENABLED=true`) and runs are logged automatically.
+When `inspect-mlflow-ext` is installed in the Inspect runtime environment (module name: `inspect_mlflow`), MLflow logging is enabled by default (`INSPECT_MLFLOW_ENABLED=true`) and runs are logged automatically.
 If you need to disable logging, set:
 
 ```bash
