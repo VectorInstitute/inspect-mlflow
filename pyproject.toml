@@ -1,5 +1,5 @@
 [project]
-name = "inspect-mlflow"
+name = "inspect-mlflow-ext"
 version = "0.1.0"
 description = "MLflow integration for Inspect AI"
 readme = "README.md"
