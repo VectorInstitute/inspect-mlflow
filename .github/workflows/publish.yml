@@ -1,6 +1,6 @@
 name: publish package
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 on:
@@ -48,3 +48,4 @@ jobs:
         with:
           artifacts: "dist/*"
           generateReleaseNotes: true
+          allowUpdates: true
