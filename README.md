@@ -10,6 +10,8 @@ The intent is:
 
 At runtime, the extension consumes Inspect hook events and writes run data to MLflow.
 
+> Note: The features from this repository have been consolidated into https://pypi.org/project/inspect-mlflow/ (`pip install inspect-mlflow`). Both packages use the same `inspect_mlflow` module name, so installing both will cause conflicts. Please use the published package for the latest features.
+
 ## Install
 
 From PyPI:
